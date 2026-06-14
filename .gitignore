@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.venv
+venv/
+blast_debug.txt
+*.log
+.DS_Store
+Thumbs.db

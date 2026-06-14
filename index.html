@@ -1,0 +1,2349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Aaron's Archive — Free online DNA, RNA and protein sequence analysis. BLAST, phylogenetic trees, Ramachandran plots, 3D structure viewer and more.">
+<meta name="theme-color" content="#0a1628">
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<link rel="preconnect" href="https://3dmol.csb.pitt.edu">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Aaron's Archive — DNA Analysis Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<!-- 3Dmol loaded on demand -->
+<style>
+:root{
+  --bg:#060a0d;--panel:#0d1820;--panel2:#111f28;
+  --border:#172630;--border2:#1e3545;
+  --amber:#f0b429;--green:#34d399;--cyan:#22d3ee;
+  --red:#f87171;--purple:#c084fc;--pink:#f472b6;
+  --text:#cde4ec;--text2:#6b96a8;--text3:#3a5f70;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-weight:300;min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 70% 40% at 15% 0%,rgba(34,211,238,0.04) 0%,transparent 60%),
+             radial-gradient(ellipse 50% 35% at 85% 5%,rgba(192,132,252,0.03) 0%,transparent 60%)}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* ── TOPBAR ── */
+.topbar{position:sticky;top:0;z-index:200;background:rgba(6,10,13,0.94);
+  border-bottom:1px solid var(--border);padding:0 24px;
+  display:flex;align-items:center;gap:14px;height:56px;backdrop-filter:blur(20px)}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-mark{width:32px;height:32px;border:1.5px solid var(--amber);border-radius:7px;
+  display:flex;align-items:center;justify-content:center;font-size:16px;
+  background:rgba(240,180,41,0.07);box-shadow:0 0 14px rgba(240,180,41,0.22)}
+.brand h1{font-size:0.95rem;font-weight:800;letter-spacing:0.22em;color:var(--amber)}
+.brand-sub{font-size:0.55rem;color:var(--text3);letter-spacing:0.12em;font-family:'IBM Plex Mono',monospace;margin-top:1px}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.status-pill{display:flex;align-items:center;gap:6px;background:rgba(52,211,153,0.06);
+  border:1px solid rgba(52,211,153,0.18);padding:4px 10px;border-radius:20px}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 7px var(--green)}
+.status-pill span{font-size:0.58rem;color:var(--green);font-family:'IBM Plex Mono',monospace;letter-spacing:0.15em}
+
+/* ── TOOL NAV ── */
+.toolnav{position:sticky;top:56px;z-index:199;background:rgba(6,10,13,0.96);
+  border-bottom:1px solid var(--border);backdrop-filter:blur(20px)}
+.toolnav-inner{max-width:1480px;margin:0 auto;padding:0 22px;
+  display:flex;overflow-x:auto;scrollbar-width:none}
+.toolnav-inner::-webkit-scrollbar{display:none}
+.tnav{background:transparent;border:none;border-bottom:2px solid transparent;
+  color:var(--text3);padding:13px 18px;font-size:0.65rem;font-family:'IBM Plex Mono',monospace;
+  letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;white-space:nowrap;
+  transition:color .2s,border-color .2s;flex-shrink:0}
+.tnav:hover{color:var(--text2)}
+.tnav.active{color:var(--amber);border-bottom-color:var(--amber)}
+.tnav-new{display:inline-block;background:rgba(240,180,41,0.14);color:var(--amber);
+  font-size:0.48rem;padding:1px 5px;border-radius:3px;margin-left:5px;vertical-align:middle}
+
+/* ── LAYOUT ── */
+.tool-section{display:none;animation:fadeUp .28s ease}
+.tool-section.active{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.layout{max-width:1480px;margin:0 auto;padding:22px;display:grid;grid-template-columns:370px 1fr;gap:18px;align-items:start}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+
+/* ── INPUT PANEL ── */
+.input-panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;
+  overflow:hidden;position:sticky;top:98px}
+.panel-hd{padding:12px 16px;border-bottom:1px solid var(--border);background:var(--panel2);
+  display:flex;align-items:center;justify-content:space-between}
+.panel-hd span{font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;
+  font-family:'IBM Plex Mono',monospace;color:var(--text2)}
+.panel-body{padding:15px;display:flex;flex-direction:column;gap:12px}
+textarea.seq{width:100%;min-height:190px;background:#020810;border:1px solid var(--border);
+  color:var(--green);padding:12px;border-radius:8px;font-family:'IBM Plex Mono',monospace;
+  font-size:0.76rem;line-height:1.9;letter-spacing:0.06em;resize:vertical;outline:none;
+  transition:border-color .3s,box-shadow .3s}
+textarea.seq::placeholder{color:var(--text3)}
+textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(52,211,153,0.05)}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:0.58rem;letter-spacing:0.18em;text-transform:uppercase;
+  font-family:'IBM Plex Mono',monospace;color:var(--text2)}
+.field input,.field select{background:#020810;border:1px solid var(--border);
+  color:var(--cyan);padding:9px 12px;border-radius:7px;font-family:'IBM Plex Mono',monospace;
+  font-size:0.75rem;outline:none;transition:border-color .3s;width:100%}
+.field input:focus,.field select:focus{border-color:rgba(34,211,238,0.38)}
+.field .hint{font-size:0.58rem;color:var(--text3);font-family:'IBM Plex Mono',monospace;line-height:1.7}
+.field .hint a{color:var(--cyan);text-decoration:none}
+.field .hint a:hover{text-decoration:underline}
+.samples{display:flex;flex-wrap:wrap;gap:5px}
+.samp{background:transparent;border:1px solid var(--border2);color:var(--text2);
+  padding:4px 10px;border-radius:4px;font-size:0.63rem;font-family:'IBM Plex Mono',monospace;
+  cursor:pointer;transition:all .18s;letter-spacing:0.05em}
+.samp:hover{border-color:var(--amber);color:var(--amber);background:rgba(240,180,41,0.05)}
+.btn-run{width:100%;padding:14px;background:linear-gradient(135deg,rgba(240,180,41,0.14),rgba(240,180,41,0.07));
+  border:1px solid var(--amber);color:var(--amber);font-family:'Inter',sans-serif;font-weight:700;
+  font-size:0.8rem;letter-spacing:0.2em;text-transform:uppercase;border-radius:8px;cursor:pointer;
+  transition:all .25s;position:relative;overflow:hidden}
+.btn-run:hover{background:linear-gradient(135deg,rgba(240,180,41,0.24),rgba(240,180,41,0.13));
+  box-shadow:0 0 24px rgba(240,180,41,0.18)}
+.btn-run:disabled{opacity:0.35;cursor:not-allowed}
+.err-box{background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.3);color:var(--red);
+  padding:9px 13px;border-radius:7px;font-family:'IBM Plex Mono',monospace;font-size:0.7rem;
+  display:none;line-height:1.6}
+.err-box.show{display:block}
+
+/* ── RESULTS ── */
+.right-panel{display:flex;flex-direction:column;gap:15px}
+.empty-state{background:var(--panel);border:1px solid var(--border);border-radius:12px;
+  padding:56px 36px;text-align:center}
+.empty-icon{font-size:2.8rem;margin-bottom:14px;opacity:0.28}
+.empty-title{font-size:1.05rem;font-weight:600;color:var(--text2);margin-bottom:5px}
+.empty-sub{font-size:0.74rem;color:var(--text3);line-height:1.8}
+
+/* ── LOADING ── */
+.loading{background:var(--panel);border:1px solid var(--border);border-radius:12px;
+  padding:52px;text-align:center;display:none;font-family:'IBM Plex Mono',monospace;
+  font-size:0.78rem;color:var(--text2)}
+.loading.show{display:block}
+.load-bar{width:240px;height:2px;background:var(--border);margin:16px auto;
+  border-radius:2px;overflow:hidden}
+.load-bar::after{content:'';display:block;height:100%;width:35%;
+  background:linear-gradient(90deg,transparent,var(--amber),transparent);
+  animation:sweep 1.2s ease-in-out infinite}
+@keyframes sweep{from{transform:translateX(-200%)}to{transform:translateX(500%)}}
+.load-sub{font-size:0.6rem;color:var(--text3);margin-top:6px;line-height:1.7}
+
+/* ── TILES ── */
+.tile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(126px,1fr));gap:9px}
+.stat-tile{background:var(--panel);border:1px solid var(--border);border-radius:10px;
+  padding:14px 13px;transition:border-color .2s,transform .18s;cursor:default}
+.stat-tile:hover{border-color:var(--border2);transform:translateY(-1px)}
+.tile-lbl{font-size:0.54rem;letter-spacing:0.18em;text-transform:uppercase;
+  font-family:'IBM Plex Mono',monospace;color:var(--text3);margin-bottom:7px}
+.tile-val{font-size:1.4rem;font-weight:800;line-height:1}
+.tile-sub{font-size:0.56rem;color:var(--text3);font-family:'IBM Plex Mono',monospace;margin-top:4px}
+.va{color:var(--amber)}.vg{color:var(--green)}.vc{color:var(--cyan)}
+.vr{color:var(--red)}.vp{color:var(--purple)}.vpk{color:var(--pink)}
+
+/* ── TABS ── */
+.tabs-wrap{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:visible}
+.tab-bar{display:flex;overflow-x:auto;background:var(--panel2);border-bottom:1px solid var(--border);scrollbar-width:none}
+.tab-bar::-webkit-scrollbar{display:none}
+.tab{padding:10px 15px;font-size:0.62rem;font-family:'IBM Plex Mono',monospace;letter-spacing:0.1em;
+  text-transform:uppercase;cursor:pointer;border-bottom:2px solid transparent;
+  color:var(--text3);white-space:nowrap;transition:all .18s;flex-shrink:0;user-select:none}
+.tab:hover{color:var(--text2)}
+.tab.active{color:var(--cyan);border-bottom-color:var(--cyan)}
+.tab-content{display:none;padding:18px;animation:fadeUp .22s ease;overflow:visible}
+.tab-content.active{display:block}
+
+/* ── SHARED ELEMENTS ── */
+.sec-head{font-size:0.6rem;letter-spacing:0.18em;text-transform:uppercase;
+  font-family:'IBM Plex Mono',monospace;color:var(--text2);margin-bottom:11px;
+  padding-bottom:7px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:7px}
+.sec-head::before{content:'';display:block;width:2px;height:11px;background:var(--cyan);border-radius:2px}
+.chart-box{background:#020810;border:1px solid var(--border);border-radius:9px;padding:14px;margin-bottom:14px}
+.chart-title{font-size:0.58rem;letter-spacing:0.16em;text-transform:uppercase;
+  font-family:'IBM Plex Mono',monospace;color:var(--text3);margin-bottom:10px}
+.data-table{width:100%;border-collapse:collapse;font-size:0.76rem}
+.data-table th{background:var(--panel2);color:var(--text2);padding:7px 11px;text-align:left;
+  font-weight:500;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;
+  border-bottom:1px solid var(--border)}
+.data-table td{padding:6px 11px;border-bottom:1px solid rgba(23,38,48,0.6);vertical-align:middle}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tr:hover td{background:rgba(255,255,255,0.012)}
+.badge{display:inline-flex;align-items:center;padding:2px 6px;border-radius:4px;
+  font-size:0.58rem;font-weight:600;font-family:'IBM Plex Mono',monospace;letter-spacing:0.05em;white-space:nowrap}
+.bg{background:rgba(52,211,153,0.1);color:var(--green);border:1px solid rgba(52,211,153,0.22)}
+.ba{background:rgba(240,180,41,0.1);color:var(--amber);border:1px solid rgba(240,180,41,0.22)}
+.bc{background:rgba(34,211,238,0.08);color:var(--cyan);border:1px solid rgba(34,211,238,0.18)}
+.br{background:rgba(248,113,113,0.08);color:var(--red);border:1px solid rgba(248,113,113,0.18)}
+.bp{background:rgba(192,132,252,0.08);color:var(--purple);border:1px solid rgba(192,132,252,0.18)}
+.seq-display{font-family:'IBM Plex Mono',monospace;font-size:0.7rem;background:#020810;
+  border:1px solid var(--border);border-radius:7px;padding:11px;word-break:break-all;
+  line-height:2;margin-bottom:9px;letter-spacing:0.07em}
+.primer-seq{font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:var(--green);
+  word-break:break-all;background:rgba(52,211,153,0.04);padding:9px 11px;border-radius:6px;
+  border:1px solid rgba(52,211,153,0.1);margin:5px 0;line-height:1.8}
+.export-bar{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+.export-btn{background:rgba(52,211,153,0.07);border:1px solid rgba(52,211,153,0.25);
+  color:var(--green);padding:8px 16px;border-radius:7px;font-family:'IBM Plex Mono',monospace;
+  font-size:0.63rem;letter-spacing:0.1em;cursor:pointer;transition:all .2s}
+.export-btn:hover{background:rgba(52,211,153,0.14);box-shadow:0 0 14px rgba(52,211,153,0.12)}
+.export-btn.blue{background:rgba(34,211,238,0.07);border-color:rgba(34,211,238,0.25);color:var(--cyan)}
+.export-btn.blue:hover{background:rgba(34,211,238,0.14)}
+.ai-card{background:linear-gradient(135deg,rgba(240,180,41,0.04),rgba(34,211,238,0.03));
+  border:1px solid rgba(240,180,41,0.18);border-radius:11px;padding:22px 20px;position:relative;
+  overflow:visible;height:auto}
+.ai-card::before{content:'◈ AI INTERPRETATION';position:absolute;top:-8px;left:14px;
+  background:var(--bg);padding:0 7px;font-size:0.54rem;letter-spacing:0.2em;
+  color:var(--amber);font-family:'IBM Plex Mono',monospace}
+.ai-text{font-size:0.86rem;line-height:1.9;color:var(--text);overflow:visible;height:auto;white-space:normal;word-wrap:break-word}
+.align-block{background:#020810;border:1px solid var(--border);border-radius:9px;
+  padding:14px;font-family:'IBM Plex Mono',monospace;font-size:0.69rem;overflow-x:auto;
+  line-height:2;white-space:pre}
+.pair-card{background:var(--panel);border:1px solid var(--border);border-radius:11px;
+  padding:16px;margin-bottom:10px;transition:border-color .2s}
+.pair-card:hover{border-color:var(--border2)}
+.pair-card.top{border-color:rgba(52,211,153,0.28);background:rgba(52,211,153,0.02)}
+.blast-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;
+  padding:14px;margin-bottom:9px;transition:border-color .2s}
+.blast-card:hover{border-color:var(--border2)}
+
+/* ── ORF MAP ── */
+.orf-map{background:#020810;border:1px solid var(--border);border-radius:9px;padding:14px;overflow-x:auto;margin-bottom:14px}
+.orf-lane{height:22px;position:relative;margin-bottom:4px}
+.orf-bar{position:absolute;height:16px;top:3px;border-radius:3px;display:flex;align-items:center;
+  padding:0 4px;overflow:hidden;white-space:nowrap;border:1px solid;cursor:default;min-width:2px;
+  font-size:0.45rem;font-family:'IBM Plex Mono',monospace}
+
+/* ── REMAP ── */
+.remap{position:relative;background:#020810;border:1px solid var(--border);border-radius:9px;
+  padding:18px 18px 10px;overflow-x:auto;min-height:60px}
+.remap-lane{position:relative;height:24px;margin-bottom:3px}
+.remap-line{position:absolute;top:11px;left:0;right:0;height:1px;background:var(--border)}
+.remap-site{position:absolute;top:1px;transform:translateX(-50%);background:var(--panel);
+  border:1px solid;border-radius:3px;padding:2px 4px;font-size:0.47rem;
+  font-family:'IBM Plex Mono',monospace;white-space:nowrap;cursor:default;z-index:2}
+
+/* ── CODON GRID ── */
+.codon-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;margin-top:7px}
+.codon-cell{aspect-ratio:1;border-radius:3px;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;cursor:default;transition:transform .1s}
+.codon-cell:hover{transform:scale(1.14);z-index:5}
+.codon-cell .cod{font-size:0.43rem;font-weight:700;font-family:'IBM Plex Mono',monospace}
+.codon-cell .cnt{font-size:0.4rem;font-family:'IBM Plex Mono',monospace}
+
+/* ── HELP BUTTON & PANEL ── */
+.help-btn{position:fixed;bottom:24px;right:24px;z-index:500;width:50px;height:50px;
+  border-radius:50%;background:var(--panel2);border:1.5px solid var(--border2);color:var(--amber);
+  font-size:1.3rem;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,0.5);
+  transition:all .25s;display:flex;align-items:center;justify-content:center;
+  font-family:'IBM Plex Mono',monospace}
+.help-btn:hover{border-color:var(--amber);box-shadow:0 0 22px rgba(240,180,41,0.28),0 4px 20px rgba(0,0,0,0.5);transform:scale(1.08)}
+.help-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:490;
+  display:none;backdrop-filter:blur(3px)}
+.help-overlay.open{display:block}
+.help-panel{position:fixed;top:0;right:0;bottom:0;z-index:495;width:min(460px,95vw);
+  background:var(--panel);border-left:1px solid var(--border);overflow-y:auto;
+  transform:translateX(100%);transition:transform .32s cubic-bezier(.4,0,.2,1)}
+.help-panel.open{transform:translateX(0)}
+.help-top{position:sticky;top:0;background:var(--panel2);border-bottom:1px solid var(--border);
+  padding:16px 18px;display:flex;align-items:center;justify-content:space-between;z-index:2}
+.help-top h2{font-size:0.88rem;font-weight:700;color:var(--amber);letter-spacing:0.08em}
+.help-close{background:none;border:none;color:var(--text2);font-size:1.3rem;cursor:pointer;
+  padding:0 4px;line-height:1;transition:color .15s}
+.help-close:hover{color:var(--text)}
+.help-search{padding:11px 18px;border-bottom:1px solid var(--border)}
+.help-search input{width:100%;background:#020810;border:1px solid var(--border);
+  color:var(--text);padding:8px 13px;border-radius:7px;font-family:'IBM Plex Mono',monospace;
+  font-size:0.74rem;outline:none}
+.help-search input:focus{border-color:var(--amber)}
+.help-sec{border-bottom:1px solid var(--border)}
+.help-sec-hd{padding:13px 18px;display:flex;align-items:center;justify-content:space-between;
+  cursor:pointer;transition:background .15s;user-select:none}
+.help-sec-hd:hover{background:rgba(255,255,255,0.018)}
+.help-sec-hd h3{font-size:0.76rem;font-weight:600;color:var(--text)}
+.help-arrow{color:var(--text3);transition:transform .22s;font-size:0.75rem}
+.help-sec-hd.open .help-arrow{transform:rotate(90deg)}
+.help-items{display:none;padding:0 18px 14px}
+.help-items.open{display:block}
+.help-item{margin-bottom:10px}
+.help-term{font-size:0.7rem;font-weight:600;color:var(--cyan);font-family:'IBM Plex Mono',monospace;
+  margin-bottom:3px;cursor:pointer;display:flex;align-items:center;gap:5px}
+.help-term::before{content:'▶';font-size:0.5rem;color:var(--text3);transition:transform .18s;flex-shrink:0}
+.help-term.open::before{transform:rotate(90deg);color:var(--cyan)}
+.help-def{font-size:0.74rem;color:var(--text2);line-height:1.75;display:none;
+  padding-left:11px;border-left:2px solid var(--border2);margin-top:4px}
+.help-def.open{display:block}
+.help-eg{font-size:0.64rem;color:var(--text3);font-family:'IBM Plex Mono',monospace;
+  margin-top:5px;padding:5px 8px;background:rgba(255,255,255,0.02);border-radius:4px;line-height:1.6}
+
+/* ── STRUCTURE VIEWER ── */
+.struct-wrap{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:14px}
+.struct-header{padding:14px 18px;background:var(--panel2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.struct-title{font-size:0.82rem;font-weight:700;color:var(--amber)}
+.struct-sub{font-size:0.62rem;color:var(--text2);font-family:'IBM Plex Mono',monospace;margin-top:2px}
+.struct-body{display:grid;grid-template-columns:1fr 280px;gap:0}
+@media(max-width:900px){.struct-body{grid-template-columns:1fr}}
+.struct-viewer{position:relative;height:440px;background:#020810}
+.struct-viewer canvas{display:block}
+.struct-loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(2,8,16,0.92);z-index:10}
+.struct-loading .load-bar{width:180px}
+.struct-controls{padding:14px;border-left:1px solid var(--border);background:var(--panel2);display:flex;flex-direction:column;gap:10px;overflow-y:auto}
+.struct-control-group{display:flex;flex-direction:column;gap:5px}
+.struct-control-group label{font-size:0.54rem;letter-spacing:0.15em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:var(--text3)}
+.struct-btn{width:100%;padding:8px;background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.22);color:var(--cyan);border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:0.62rem;letter-spacing:0.08em;cursor:pointer;transition:all .2s;text-align:left}
+.struct-btn:hover{background:rgba(34,211,238,0.16);box-shadow:0 0 12px rgba(34,211,238,0.12)}
+.struct-btn.active{background:rgba(34,211,238,0.2);border-color:var(--cyan);color:#fff}
+.struct-btn.amber{background:rgba(240,180,41,0.08);border-color:rgba(240,180,41,0.22);color:var(--amber)}
+.struct-btn.amber:hover{background:rgba(240,180,41,0.16)}
+.struct-btn.green{background:rgba(52,211,153,0.08);border-color:rgba(52,211,153,0.22);color:var(--green)}
+.struct-btn.green:hover{background:rgba(52,211,153,0.16)}
+.struct-source-tabs{display:flex;gap:4px;margin-bottom:4px}
+.struct-source-tab{flex:1;padding:6px 4px;text-align:center;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:5px;font-size:0.55rem;font-family:'IBM Plex Mono',monospace;cursor:pointer;color:var(--text3);transition:all .2s}
+.struct-source-tab.active{background:rgba(240,180,41,0.1);border-color:var(--amber);color:var(--amber)}
+.struct-rcsb-list{display:flex;flex-direction:column;gap:4px;margin-top:4px}
+.struct-rcsb-btn{padding:5px 8px;background:rgba(192,132,252,0.07);border:1px solid rgba(192,132,252,0.2);border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--purple);cursor:pointer;transition:all .18s;text-align:left}
+.struct-rcsb-btn:hover{background:rgba(192,132,252,0.16)}
+.struct-func{font-size:0.7rem;color:var(--text2);line-height:1.7;padding:10px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:7px}
+.struct-err{padding:14px 18px;color:var(--red);font-family:'IBM Plex Mono',monospace;font-size:0.72rem;line-height:1.6}
+.view-struct-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:rgba(192,132,252,0.1);border:1px solid rgba(192,132,252,0.3);border-radius:6px;color:var(--purple);font-family:'IBM Plex Mono',monospace;font-size:0.62rem;letter-spacing:0.08em;cursor:pointer;margin-top:8px;transition:all .2s}
+.view-struct-btn:hover{background:rgba(192,132,252,0.2);box-shadow:0 0 14px rgba(192,132,252,0.15)}
+/* ── PHYLO TREE ── */
+.phylo-wrap{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.phylo-header{padding:14px 18px;background:var(--panel2);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.phylo-canvas-wrap{padding:18px;overflow:auto;min-height:400px;background:#020810}
+.phylo-info{padding:12px 18px;background:var(--panel2);border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.phylo-dm{overflow-x:auto;padding:12px 18px;background:#020810;border-top:1px solid var(--border)}
+.phylo-dm table{border-collapse:collapse;font-family:'IBM Plex Mono',monospace;font-size:0.6rem}
+.phylo-dm td,.phylo-dm th{padding:4px 8px;border:1px solid var(--border);text-align:right}
+.phylo-dm th{background:var(--panel2);color:var(--amber);text-align:center}
+.phylo-dm .zero{color:var(--text3)}
+.phylo-dm .low{color:var(--green)}
+.phylo-dm .mid{color:var(--amber)}
+.phylo-dm .high{color:var(--red)}
+/* ── RAMACHANDRAN ── */
+.rama-wrap{background:var(--panel2);border-top:1px solid var(--border);padding:14px 18px}
+.rama-title{font-size:0.72rem;font-weight:700;color:var(--cyan);margin-bottom:10px}
+.rama-canvas-wrap{position:relative;width:100%;aspect-ratio:1/1;max-width:380px;margin:0 auto}
+.rama-legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;font-size:0.6rem;font-family:'IBM Plex Mono',monospace}
+.rama-legend span{display:flex;align-items:center;gap:4px;color:var(--text2)}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<nav class="topbar">
+  <div class="brand">
+    <div class="brand-mark">🧬</div>
+    <div>
+      <h1>Aaron's Archive</h1>
+      <div class="brand-sub">DNA Analysis Engine · v3.2</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="status-pill">
+      <div class="status-dot"></div>
+      <span>ONLINE</span>
+    </div>
+  </div>
+</nav>
+
+<!-- TOOL NAV -->
+<div class="toolnav">
+  <div class="toolnav-inner">
+    <button class="tnav active" id="nav-single"  onclick="switchTool('single')">⬡ Single Sequence</button>
+    <button class="tnav"        id="nav-batch"   onclick="switchTool('batch')">⊞ Batch FASTA</button>
+    <button class="tnav"        id="nav-align"   onclick="switchTool('align')">⇌ Alignment</button>
+    <button class="tnav"        id="nav-primers" onclick="switchTool('primers')">⌖ Advanced Primers</button>
+    <button class="tnav"        id="nav-blast"   onclick="switchTool('blast')">🔍 BLAST <span class="tnav-new">NCBI</span></button>
+    <button class="tnav"        id="nav-phylo"   onclick="switchTool('phylo')">🌿 Phylo Tree <span class="tnav-new">NEW</span></button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     TOOL 1 — SINGLE SEQUENCE
+════════════════════════════════════════════ -->
+<div id="tool-single" class="tool-section active">
+<div class="layout">
+  <aside class="input-panel">
+    <div class="panel-hd">
+      <span>⬡ Sequence Input</span>
+      <span id="seqTypeLabel" style="color:var(--green);font-size:0.54rem;font-family:'IBM Plex Mono',monospace"></span>
+    </div>
+    <div class="panel-body">
+      <div class="field">
+        <label>Paste DNA, RNA, or Protein</label>
+        <textarea class="seq" id="seqInput" placeholder="ATGAAAGCAATTTTCGTACT...&#10;&#10;Auto-detects type.&#10;FASTA format supported (ignores header)."></textarea>
+      </div>
+      <div>
+        <div style="font-size:0.54rem;color:var(--text3);font-family:'IBM Plex Mono',monospace;margin-bottom:5px;letter-spacing:0.14em">LOAD SAMPLE →</div>
+        <div class="samples">
+          <button class="samp" onclick="loadSample('tp53')">TP53</button>
+          <button class="samp" onclick="loadSample('insulin')">Insulin</button>
+          <button class="samp" onclick="loadSample('brca1')">BRCA1</button>
+          <button class="samp" onclick="loadSample('protein')">KRAS protein</button>
+          <button class="samp" onclick="loadSample('rna')">mRNA</button>
+          <button class="samp" onclick="document.getElementById('seqInput').value='';document.getElementById('seqTypeLabel').textContent=''">✕ Clear</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>🤖 AI Key <span style="color:var(--green);font-size:0.54rem;font-weight:400">(optional — free)</span></label>
+        <input type="password" id="apiKey" placeholder="gsk_...  or  AIza...">
+        <div class="hint">
+          <b style="color:var(--amber)">Groq</b> (free): <a href="https://console.groq.com" target="_blank">console.groq.com</a> — key starts with <code style="color:var(--green)">gsk_</code><br>
+          <b style="color:var(--cyan)">Gemini</b> (free): <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a> — key starts with <code style="color:var(--green)">AIza</code>
+        </div>
+      </div>
+      <button class="btn-run" id="analyzeBtn" onclick="runAnalyze()">▶ &nbsp;Run Deep Analysis</button>
+      <div class="err-box" id="errMsg"></div>
+    </div>
+  </aside>
+  <div class="right-panel" id="rightPanel">
+    <div class="empty-state">
+      <div class="empty-icon">🔬</div>
+      <div class="empty-title">Paste a sequence to begin</div>
+      <div class="empty-sub">Supports DNA · RNA · Protein<br>All algorithms run locally — no data is sent to any server<br><br><span style="color:var(--amber)">?</span> button (bottom-right) explains every term and chart</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     TOOL 2 — BATCH FASTA
+════════════════════════════════════════════ -->
+<div id="tool-batch" class="tool-section">
+<div class="layout">
+  <aside class="input-panel">
+    <div class="panel-hd"><span>⊞ Multi-FASTA</span></div>
+    <div class="panel-body">
+      <div class="field">
+        <label>Paste multi-FASTA (up to 50 sequences)</label>
+        <textarea class="seq" id="batchInput" style="min-height:250px" placeholder=">Gene_1&#10;ATGAAAGCAATTTTCGTACT...&#10;&#10;>Gene_2&#10;ATGGAGGAGCCGCAGTCAG..."></textarea>
+      </div>
+      <div class="samples">
+        <button class="samp" onclick="loadBatchSample()">▶ Load example</button>
+        <button class="samp" onclick="document.getElementById('batchInput').value=''">✕ Clear</button>
+      </div>
+      <button class="btn-run" id="batchBtn" onclick="runBatch()">⊞ &nbsp;Analyze All</button>
+      <div class="err-box" id="batchErr"></div>
+    </div>
+  </aside>
+  <div id="batchResults">
+    <div class="empty-state"><div class="empty-icon">⊞</div><div class="empty-title">Batch Analysis</div><div class="empty-sub">Analyze multiple sequences at once and compare them in a table</div></div>
+  </div>
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     TOOL 3 — ALIGNMENT
+════════════════════════════════════════════ -->
+<div id="tool-align" class="tool-section">
+<div class="layout">
+  <aside class="input-panel">
+    <div class="panel-hd"><span>⇌ Pairwise Alignment</span></div>
+    <div class="panel-body">
+      <div class="field">
+        <label>Sequence 1</label>
+        <textarea class="seq" id="alignSeq1" style="min-height:100px" placeholder="ATGAAAGCAATTTTCGTACTG..."></textarea>
+      </div>
+      <div class="field">
+        <label>Sequence 2</label>
+        <textarea class="seq" id="alignSeq2" style="min-height:100px" placeholder="ATGAAAGCAATTTTTGTACTG..."></textarea>
+      </div>
+      <div class="field">
+        <label>Algorithm</label>
+        <select id="alignMethod">
+          <option value="local">Smith-Waterman — Local (best for partial matches)</option>
+          <option value="global">Needleman-Wunsch — Global (best for full-length comparison)</option>
+        </select>
+      </div>
+      <div class="samples">
+        <button class="samp" onclick="loadAlignSample('dna')">▶ DNA example</button>
+        <button class="samp" onclick="loadAlignSample('protein')">▶ Protein example</button>
+      </div>
+      <button class="btn-run" id="alignBtn" onclick="runAlign()">⇌ &nbsp;Align Sequences</button>
+      <div class="err-box" id="alignErr"></div>
+    </div>
+  </aside>
+  <div id="alignResults">
+    <div class="empty-state"><div class="empty-icon">⇌</div><div class="empty-title">Pairwise Alignment</div><div class="empty-sub">Compare two sequences to find similarities and differences</div></div>
+  </div>
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     TOOL 4 — ADVANCED PRIMERS
+════════════════════════════════════════════ -->
+<div id="tool-primers" class="tool-section">
+<div class="layout">
+  <aside class="input-panel">
+    <div class="panel-hd"><span>⌖ Advanced Primer Design</span></div>
+    <div class="panel-body">
+      <div class="field">
+        <label>Template DNA (min 60 bp)</label>
+        <textarea class="seq" id="primerInput" style="min-height:210px" placeholder="ATGAAAGCAATTTTCGTACTG..."></textarea>
+      </div>
+      <div class="samples">
+        <button class="samp" onclick="loadPrimerSample()">▶ Load example</button>
+        <button class="samp" onclick="document.getElementById('primerInput').value=''">✕ Clear</button>
+      </div>
+      <button class="btn-run" id="primersBtn" onclick="runPrimers()">⌖ &nbsp;Design Primer Pairs</button>
+      <div class="err-box" id="primersErr"></div>
+      <div style="margin-top:12px;padding:11px;background:#020810;border:1px solid var(--border);border-radius:7px;font-size:0.6rem;color:var(--text3);font-family:'IBM Plex Mono',monospace;line-height:2">
+        ✓ Tests 4 lengths: 18, 20, 22, 24 bp<br>
+        ✓ Hairpin &amp; self-dimer detection<br>
+        ✓ Heterodimer (forward+reverse) check<br>
+        ✓ GC clamp, Tm 55–68°C, GC 40–60%<br>
+        ✓ Returns top 8 pairs ranked by quality
+      </div>
+    </div>
+  </aside>
+  <div id="primersResults">
+    <div class="empty-state"><div class="empty-icon">⌖</div><div class="empty-title">Advanced Primer Design</div><div class="empty-sub">Finds the best forward + reverse primer pairs for PCR</div></div>
+  </div>
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     TOOL 5 — BLAST
+════════════════════════════════════════════ -->
+<div id="tool-blast" class="tool-section">
+<div class="layout">
+  <aside class="input-panel">
+    <div class="panel-hd"><span>🔍 BLAST via NCBI</span></div>
+    <div class="panel-body">
+      <div class="field">
+        <label>Query Sequence (max ~1000 bp for speed)</label>
+        <textarea class="seq" id="blastInput" style="min-height:200px" placeholder="ATGAAAGCAATTTTCGTACTG...&#10;&#10;DNA, RNA, or protein — auto-detected"></textarea>
+      </div>
+      <div class="field">
+        <label>Database</label>
+        <select id="blastDb">
+          <option value="nt">nt — Nucleotide (for DNA/RNA)</option>
+          <option value="nr">nr — Non-redundant (for protein)</option>
+          <option value="refseq_rna">RefSeq RNA</option>
+          <option value="refseq_protein">RefSeq Protein</option>
+          <option value="swissprot">SwissProt (curated proteins)</option>
+        </select>
+      </div>
+      <div class="samples">
+        <button class="samp" onclick="loadSample('tp53',true)">▶ TP53 DNA</button>
+        <button class="samp" onclick="loadSample('protein',true)">▶ KRAS protein</button>
+      </div>
+      <button class="btn-run" id="blastBtn" onclick="runBlast()">🔍 &nbsp;Submit to NCBI BLAST</button>
+      <div class="err-box" id="blastErr"></div>
+      <div style="margin-top:12px;padding:11px;background:#020810;border:1px solid var(--border);border-radius:7px;font-size:0.6rem;color:var(--text3);font-family:'IBM Plex Mono',monospace;line-height:2">
+        ⚠ BLAST queries NCBI servers (internet required)<br>
+        ⏱ Results take 30–120 seconds<br>
+        📏 Shorter sequences (&lt;500 bp) run faster<br>
+        🔄 Do not close this tab while waiting
+      </div>
+    </div>
+  </aside>
+  <div id="blastResults">
+    <div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">BLAST Search</div>
+      <div class="empty-sub">Searches NCBI's database of billions of known sequences to identify what your sequence is, what organism it's from, and what genes are similar to it.<br><br>Requires an internet connection.</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     TOOL 6 — PHYLOGENETIC TREE
+════════════════════════════════════════════ -->
+<div id="tool-phylo" class="tool-section">
+<div class="layout">
+  <aside class="input-panel">
+    <div class="panel-hd"><span>🌿 Phylogenetic Tree</span></div>
+    <div class="panel-body">
+      <div class="field">
+        <label>Sequences in FASTA format (2–50 sequences)</label>
+        <textarea class="seq" id="phyloInput" style="min-height:240px"
+          placeholder=">Human_TP53&#10;MEEPQSDPSVEPPLSQETFSDLWKLLPENNVLSPLPSQAMDDLMLSPDDIEQWFTEDP&#10;>Mouse_TP53&#10;MEEPQSDPSVEPPLSQETFSDLWKLLPPNNVLSPLPSQAMDDLMLSPDDIEQWFTEDP&#10;>Chimp_TP53&#10;MEEPQSDPSVEPPLSQETFSDLWKLLPENNVLSPLPSQAMDDLMLSPDDIEQWFTEDP"></textarea>
+      </div>
+      <div class="samples" style="margin-bottom:10px">
+        <button class="samp" onclick="loadPhyloSample('tp53')">▶ TP53 across species</button>
+        <button class="samp" onclick="loadPhyloSample('cytb')">▶ Cytochrome B</button>
+      </div>
+      <button class="btn-run" id="phyloBtn" onclick="runPhylo()">🌿 &nbsp;Build Tree (UPGMA)</button>
+      <div class="err-box" id="phyloErr"></div>
+      <div style="margin-top:12px;padding:11px;background:#020810;border:1px solid var(--border);border-radius:7px;font-size:0.6rem;color:var(--text3);font-family:'IBM Plex Mono',monospace;line-height:2">
+        🧬 Algorithm: UPGMA (average linkage)<br>
+        📏 Distance: p-distance (proportion of differing sites)<br>
+        🌿 All computation runs locally, no internet needed<br>
+        📋 Export tree in Newick format
+      </div>
+    </div>
+  </aside>
+  <div id="phyloResults">
+    <div class="empty-state">
+      <div class="empty-icon">🌿</div>
+      <div class="empty-title">Phylogenetic Tree</div>
+      <div class="empty-sub">Paste 2–50 sequences in FASTA format to build an evolutionary tree using UPGMA clustering.<br><br>Shows sequence relationships, branch lengths, and exportable Newick format.</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     HELP PANEL
+════════════════════════════════════════════ -->
+<button class="help-btn" onclick="toggleHelp()" title="What does everything mean?">?</button>
+<div class="help-overlay" id="helpOverlay" onclick="closeHelp()"></div>
+<div class="help-panel" id="helpPanel">
+  <div class="help-top">
+    <h2>📖 Learn — What does it all mean?</h2>
+    <button class="help-close" onclick="closeHelp()">✕</button>
+  </div>
+  <div class="help-search">
+    <input type="text" id="helpSearch" placeholder="Search… e.g. GC content, BLAST, pI" oninput="filterHelp(this.value)">
+  </div>
+  <div id="helpContent">
+
+    <div class="help-sec">
+      <div class="help-sec-hd open" onclick="toggleHelpSec(this)"><h3>🚀 Getting Started</h3><span class="help-arrow">▶</span></div>
+      <div class="help-items open">
+        <div class="help-item">
+          <div class="help-term open" onclick="toggleTerm(this)">What is Aaron's Archive?</div>
+          <div class="help-def open">Aaron's Archive is a bioinformatics tool that reads DNA, RNA, and protein sequences and calculates everything about them — composition, structure, genes, melting temperature, primers, and more. Think of it like a super-powered calculator designed specifically for genetic data.<div class="help-eg">You paste a DNA sequence → Aaron's Archive tells you its GC%, where genes are, what proteins it would make, where restriction enzymes cut it, and much more — all instantly.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">What is a DNA sequence?</div>
+          <div class="help-def">DNA (Deoxyribonucleic Acid) is the molecule that carries all genetic instructions. It's made of 4 bases: <b style="color:var(--cyan)">A</b> (Adenine), <b style="color:var(--green)">T</b> (Thymine), <b style="color:var(--amber)">G</b> (Guanine), <b style="color:var(--purple)">C</b> (Cytosine). A DNA sequence is a string of these letters. In this tool, you just type them in.<div class="help-eg">Example: ATGAAAGCAATTTTCGTACT... (this would be part of a real gene)</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">What is RNA? How is it different from DNA?</div>
+          <div class="help-def">RNA (Ribonucleic Acid) is DNA's messenger. When a gene is "read," DNA is copied into RNA (called transcription). RNA uses <b>U</b> (Uracil) instead of T. So AUGCAUGC is RNA, ATGCATGC is DNA. Aaron's Archive auto-detects which one you pasted.<div class="help-eg">Central dogma: DNA → RNA → Protein. Aaron's Archive can analyze all three steps.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">What is a protein sequence?</div>
+          <div class="help-def">Proteins are made of 20 amino acids, each with a single-letter code: A C D E F G H I K L M N P Q R S T V W Y. The order (sequence) of amino acids determines the protein's shape and function. Aaron's Archive detects protein sequences automatically.<div class="help-eg">MTEYKLVVVGAGG... is the start of the KRAS protein (mutated in many cancers)</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">What is FASTA format?</div>
+          <div class="help-def">FASTA is the universal format for biological sequences. It starts with a "header" line beginning with &gt; (the name), then the sequence on the next line. Aaron's Archive accepts plain sequences AND FASTA format — it automatically strips the header.<div class="help-eg">&gt;Insulin_gene<br>ATGGCCCTGTGGATGCGCCTCCTG...</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="help-sec">
+      <div class="help-sec-hd" onclick="toggleHelpSec(this)"><h3>🧬 DNA/RNA Analysis Terms</h3><span class="help-arrow">▶</span></div>
+      <div class="help-items">
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">GC Content (%)</div>
+          <div class="help-def">The % of bases that are G or C (vs A or T). G and C pair with 3 hydrogen bonds (stronger), while A and T pair with 2 (weaker). Higher GC% = more stable, harder to melt apart. Human DNA averages ~41% GC.<div class="help-eg">If a 100 bp sequence has 25G + 20C, GC% = 45%. A GC-rich sequence needs higher PCR temperatures.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Melting Temperature (Tm)</div>
+          <div class="help-def">The temperature at which half the DNA double helix separates into single strands. Higher GC% = higher Tm. Two methods: Wallace Rule (simple, good for primers) and Nearest-Neighbor (more accurate, accounts for neighboring bases). Critical for designing PCR conditions.<div class="help-eg">A primer with 50% GC typically melts around 55–62°C. PCR annealing temperature = Tm − 5°C</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">ORFs — Open Reading Frames</div>
+          <div class="help-def">A continuous stretch of DNA that could be translated into a protein. It starts with ATG (start codon = Methionine) and ends with TAA/TAG/TGA (stop codons). DNA has 6 possible reading frames (+1,+2,+3 on top strand, -1,-2,-3 on bottom). Longer ORFs are more likely to be real genes.<div class="help-eg">Frame +1 reads: ATG|AAA|GCA|... in triplets starting at position 1. Frame +2 starts at position 2, etc.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Restriction Enzyme Sites</div>
+          <div class="help-def">Restriction enzymes are "molecular scissors" — bacterial proteins that cut DNA at specific recognition sequences. EcoRI cuts at GAATTC. Scientists use these to cut DNA at predictable locations for cloning (inserting genes into plasmids). The map shows where each enzyme would cut your sequence.<div class="help-eg">If you want to clone a gene into a vector, you need restriction sites that: (1) are present in your gene region, (2) are also in the vector's multiple cloning site, and (3) don't cut inside your gene of interest.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">CpG Islands</div>
+          <div class="help-def">Regions where CG dinucleotides appear more frequently than expected. Found near most gene promoters (start sites) in vertebrates. CpG methylation (adding a chemical group to C) silences genes — this is called epigenetics. CpG islands are indicators of active gene promoters.<div class="help-eg">If your sequence has a CpG island, there's likely a gene promoter nearby.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">GC Skew</div>
+          <div class="help-def">GC Skew = (G − C) / (G + C). Measures whether a region has more G or C. In bacterial genomes, GC skew changes sign at the replication origin and terminus — making it useful to find where DNA replication starts. Positive = more G, Negative = more C.<div class="help-eg">GC skew = +0.2 means 60% G vs 40% C in that window</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Microsatellites / SSRs</div>
+          <div class="help-def">Short sequences of 2–6 bases repeated many times in a row: like CACACACACACA (CA × 6). Called Simple Sequence Repeats (SSRs). They are highly variable between people — different people have different numbers of repeats. Used in DNA fingerprinting, paternity testing, forensics, and population genetics.<div class="help-eg">The forensic TV show "DNA match" uses STR (Short Tandem Repeat = microsatellite) analysis. Two people sharing the same repeat pattern across 20 loci = virtually certain match.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Shannon Entropy / Complexity %</div>
+          <div class="help-def">Measures how "random" or "mixed" the sequence is. Maximum complexity = all 4 bases appear equally (like random DNA). Low complexity = repetitive (AAAAAA or ATATATATAT). Measured in bits. The % compares your sequence to the theoretical maximum. Repetitive regions are often non-coding.<div class="help-eg">AAAAAAAAAA → ~0% complexity. ATGCATGCATGC → moderate. Random genomic DNA → ~95-100%</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Codon Usage</div>
+          <div class="help-def">A codon is 3 DNA letters that code for one amino acid. There are 64 codons but only 20 amino acids, so most amino acids have multiple codons (synonyms). Different organisms prefer different synonymous codons — called codon bias. If you're producing a human protein in bacteria, "rare codons" slow down protein production. Codon optimization replaces rare codons with preferred ones.<div class="help-eg">Leucine can be coded by: TTA, TTG, CTT, CTC, CTA, CTG. Humans prefer CTG most. E. coli also prefers CTG but dislikes CTA.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Promoter Elements (TATA box, Kozak, etc.)</div>
+          <div class="help-def">Specific DNA sequences that control gene expression. The <b>TATA box</b> (TATAAA) sits ~30 bp before gene start where RNA polymerase binds. The <b>Kozak sequence</b> surrounds the ATG start codon and affects translation efficiency. <b>Shine-Dalgarno</b> is the ribosome binding site in bacteria (AGGAGG ~10 bp upstream).<div class="help-eg">If Aaron's Archive finds a TATA box upstream of an ORF — that ORF is likely a real expressed gene, not just a random open reading frame.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">RNA Secondary Structure (Nussinov algorithm)</div>
+          <div class="help-def">Single-stranded RNA folds back on itself because A pairs with U and G pairs with C within the same molecule. This creates stem-loop (hairpin) structures. The Nussinov algorithm maximizes base pairs. Shown in dot-bracket notation: ( and ) are paired, . is unpaired. mRNA structure affects translation, tRNA structure allows it to carry amino acids, ribozymes use RNA structure for catalysis.<div class="help-eg">( ( ( . . . ) ) ) means the first 3 and last 3 bases pair with each other, forming a stem with 3 unpaired bases in the loop</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="help-sec">
+      <div class="help-sec-hd" onclick="toggleHelpSec(this)"><h3>🔵 Protein Analysis Terms</h3><span class="help-arrow">▶</span></div>
+      <div class="help-items">
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Isoelectric Point (pI)</div>
+          <div class="help-def">The pH at which the protein has zero net charge. Below pI → protein is positive. Above pI → protein is negative. Critical for: purification by ion-exchange chromatography (at pI the protein won't bind), isoelectric focusing gel, predicting protein behavior at physiological pH 7.4.<div class="help-eg">pI 5 = acidic protein (negative at body pH 7.4). pI 9 = basic protein (positive at body pH). At pI, proteins often precipitate.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">GRAVY Score (Hydrophobicity)</div>
+          <div class="help-def">Grand Average of Hydropathicity. Positive = the protein prefers fat/membrane environments (hydrophobic). Negative = the protein prefers water (hydrophilic). Uses the Kyte-Doolittle scale for each amino acid.<div class="help-eg">Typical membrane protein: GRAVY +0.5 to +2.0. Typical cytoplasmic enzyme: GRAVY -0.5 to -2.0. Transmembrane helices need GRAVY &gt; +1.6 over 20+ residues.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Instability Index</div>
+          <div class="help-def">Predicts whether the protein is stable when expressed in cells. Based on dipeptide (2 amino acid) compositions associated with fast degradation. Below 40 = stable protein (half-life hours to days in cells). Above 40 = unstable (degrades in minutes to hours). Affects experimental protein production.<div class="help-eg">Most antibodies: ~30 (stable). Regulatory proteins like c-Fos: ~60 (unstable — intentional, they need to be degraded quickly to turn off signaling)</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Aromaticity</div>
+          <div class="help-def">The fraction of aromatic amino acids (Phenylalanine F, Tyrosine Y, Tryptophan W). These absorb UV light at 280 nm — this is how we measure protein concentration in lab (spectrophotometry with a NanoDrop machine). High aromaticity also stabilizes protein structure through π-stacking interactions.<div class="help-eg">W absorbs most strongly, then Y. To measure protein concentration without a standard curve, we use: A280 = (5500 × W + 1490 × Y + 125 × C) / molecular weight</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Secondary Structure (Chou-Fasman)</div>
+          <div class="help-def">Proteins fold into characteristic shapes. α-Helix = spring/coil (like a spiral staircase). β-Sheet = flat strands side by side (like a folded paper fan). The Chou-Fasman method predicts which is favored by scoring each amino acid's tendency to form helices vs. sheets based on statistical analysis of known protein structures.<div class="help-eg">Alanine (A) strongly prefers helix. Valine (V) and Isoleucine (I) prefer beta-sheet. Glycine (G) and Proline (P) break helices.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Transmembrane Helices</div>
+          <div class="help-def">Proteins embedded in cell membranes cross the lipid bilayer as α-helices made of hydrophobic amino acids. Predicted by finding regions with GRAVY &gt; 1.6 sustained for 20+ amino acids. GPCRs (like adrenergic receptors, opsins) have 7 TM helices. Ion channels, transporters have different numbers.<div class="help-eg">If Aaron's Archive finds 7 TM helices → protein is likely a GPCR (G-protein coupled receptor). If it finds 1 TM helix → could be a single-pass membrane receptor.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Signal Peptide</div>
+          <div class="help-def">A short stretch (15–30 aa) at the protein's N-terminus (beginning) that acts as a "postal address" telling the cell to send this protein to the ER for secretion or membrane insertion. The signal peptide is cleaved off after delivery. Its presence indicates a secreted protein or membrane protein.<div class="help-eg">Insulin has a signal peptide (first 24 aa). After cleavage: preproinsulin → proinsulin → insulin. Antibodies (IgG) also have signal peptides — they're secreted proteins.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Charge vs pH curve</div>
+          <div class="help-def">Shows how the total charge of the entire protein changes as pH goes from 0 to 14. At low pH (acidic), the protein is positively charged. At high pH (basic), it's negative. Where the curve crosses zero = the pI. The slope at pH 7.4 tells you how sensitive the protein is to pH changes. Used to optimize protein purification conditions.<div class="help-eg">This curve is used in the lab to choose the right pH buffer for protein storage and purification.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Hydrophobicity Profile chart</div>
+          <div class="help-def">A sliding window (9 aa at a time) plot of hydrophobicity along the protein sequence. Peaks above the red dashed line (~+1.6) sustained for 20+ residues = likely transmembrane helices. Valleys below zero = hydrophilic surface-exposed regions. Helps identify functional domains, binding sites, and membrane topology.<div class="help-eg">For a membrane receptor: you'd see peaks (TM helices) alternating with valleys (hydrophilic loops connecting them).</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="help-sec">
+      <div class="help-sec-hd" onclick="toggleHelpSec(this)"><h3>🛠 Tools Explained</h3><span class="help-arrow">▶</span></div>
+      <div class="help-items">
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Primers — what are they?</div>
+          <div class="help-def">Primers are short DNA sequences (18–25 bases) that act as starting points for DNA copying in PCR. You need two: a forward primer (matches the top strand) and a reverse primer (matches the bottom strand). The region between them gets amplified (copied millions of times). Good primers need: GC% 40-60%, Tm 55–65°C, no self-folding (hairpins), no pairing with each other (dimers).<div class="help-eg">PCR is how COVID tests amplify viral DNA, how forensic DNA is tested, and how researchers clone genes. Primers define exactly what gets amplified.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Primer Hairpin &amp; Dimer problems</div>
+          <div class="help-def">A hairpin forms when part of the primer folds back on itself and self-pairs — this means the primer is "busy" folding instead of binding to your template, reducing efficiency. A self-dimer means two copies of the same primer pair together. A heterodimer means the forward and reverse primers bind each other instead of the template. All three reduce or eliminate PCR product.<div class="help-eg">A primer ending in GCTCGC that starts with GCGAGC would form a strong hairpin — those sequences are reverse complements of each other.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Sequence Alignment explained</div>
+          <div class="help-def">Alignment lines up two sequences to find similarities. It can insert gaps (-) to make the sequences match better. It's like a "diff" tool for DNA — showing what's identical, what mutated, and what was inserted/deleted. Used to find evolutionary relationships, conserved functional sites, and mutations between strains or species.<div class="help-eg">Aligning the TP53 gene from a tumor vs. normal tissue shows the exact mutation (e.g., G→A at position 248).</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Smith-Waterman (Local alignment)</div>
+          <div class="help-def">Finds the best matching REGION between two sequences, ignoring non-matching ends. Best when you think sequences are only similar in part (e.g., comparing a protein domain to a full genome). Returns the single best local match. This algorithm underlies BLAST.<div class="help-eg">Use local alignment when: comparing a 50 aa conserved domain to a 500 aa protein, or finding a gene fragment within a genome.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Needleman-Wunsch (Global alignment)</div>
+          <div class="help-def">Aligns the ENTIRE length of both sequences end-to-end, penalizing every gap. Best when comparing sequences of similar length that are related throughout (same gene from two species). Shows total evolutionary divergence across the full sequence.<div class="help-eg">Use global alignment when: comparing the full insulin gene from human vs. pig, or checking how similar two strains of the same virus are across their whole genome.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">BLAST — Basic Local Alignment Search Tool</div>
+          <div class="help-def">BLAST searches NCBI's enormous database (billions of known sequences from millions of organisms) to find what's most similar to your sequence. It's like a Google search for DNA. Results tell you: what gene/protein this matches, what organism it's from, how similar it is (E-value), and where the alignment is.<div class="help-eg">You paste an unknown sequence → BLAST says: "99% identical to human TP53 tumor suppressor, chromosome 17p13.1." Mystery solved!</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">BLAST E-value (most important field)</div>
+          <div class="help-def">Expect value = how many hits this good you'd expect by random chance. Lower = more significant. E=0 or &lt;1e-100 = perfect/near-perfect, definitely not random. E=1e-10 to 1e-50 = very significant. E=0.01 to 1 = possibly significant. E&gt;10 = likely random. When comparing against databases of billions of sequences, even E=0.001 can be meaningful.<div class="help-eg">Finding E=3.2e-98 for a 200bp sequence means this match is astronomically unlikely by chance — it's definitely a real biological homology.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Batch FASTA analysis</div>
+          <div class="help-def">Instead of analyzing one sequence at a time, paste multiple sequences in FASTA format and get a comparison table. Useful for: comparing GC content across many genes, screening multiple variants for restriction sites, comparing sequences from different samples in an experiment.<div class="help-eg">Analyzing 20 different bacterial isolates for antibiotic resistance gene content — one click gives you a comparison table.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">BLOSUM62 matrix (for protein alignment)</div>
+          <div class="help-def">A scoring table used for protein alignment that scores each possible amino acid substitution based on how often it occurs in evolution. Conservative substitutions (similar amino acids like Leucine↔Isoleucine) score high (+2). Radical substitutions (very different like Tryptophan→Glycine) score negative (-3). Calibrated on proteins sharing ~62% identity.<div class="help-eg">Leucine to Isoleucine (both hydrophobic, similar size): score +2. Alanine to Tryptophan (tiny→huge, hydrophobic→aromatic): score -3.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="help-sec">
+      <div class="help-sec-hd" onclick="toggleHelpSec(this)"><h3>🧪 Lab Context for Students</h3><span class="help-arrow">▶</span></div>
+      <div class="help-items">
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">PCR — Polymerase Chain Reaction</div>
+          <div class="help-def">A technique to copy a specific DNA region millions of times. Uses DNA polymerase and your two primers. The 3 temperature cycles: (1) 94–98°C — Denaturation: melts DNA apart. (2) 50–65°C — Annealing: primers bind their matching sites. (3) 72°C — Extension: polymerase builds new strand. After 30 cycles = 2³⁰ copies = ~1 billion copies from one original. Used in COVID tests, forensics, gene cloning, sequencing prep.</div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Why GC% matters for PCR</div>
+          <div class="help-def">GC-rich primers need higher annealing temperatures (they're "stickier"). AT-rich primers melt too easily at high temperatures. If forward and reverse primer Tm differ by &gt;5°C, one primer won't bind efficiently at the other's optimal temperature → weak or no PCR product. That's why ΔTm is shown in the primer results.</div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Restriction cloning — why it matters</div>
+          <div class="help-def">To insert a gene into a plasmid for protein expression: (1) Cut gene and plasmid with the same restriction enzyme (creates matching "sticky ends"). (2) Mix and let sticky ends hybridize. (3) DNA ligase seals the joins. The restriction map helps you find which enzymes cut your gene in useful places (and which would destroy it).</div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Molecular Weight in biology</div>
+          <div class="help-def">Mass of a molecule. For DNA: measured in base pairs (bp) or kilodaltons (kDa). 1 kbp DNA ≈ 660 kDa. For proteins: 1 average amino acid ≈ 110 Da, so a 100 aa protein ≈ 11 kDa. Used when running gel electrophoresis (size determines how far proteins migrate), and calculating how much of a compound to add in experiments (molarity).</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════ -->
+<script>
+// ── SAMPLES ──────────────────────────────────
+const SAMPLES = {
+  tp53:    'ATGGAGGAGCCGCAGTCAGATCCTAGCGTTGAATGCCAGGGGCACAAAACCGGAGGATCATGACCCCCTTCAGGCCCCAGCAGCAACAGCCAGACCTGTGTAATAGAAACTTACAATTTTACTGCATCACCAGTGGTCCAGAGCAATCTGAACCTTTGCCACAGGAGTATTTCAGACTTTGGAAATGCTTACCAGCTAAATGAGGAGCCGCAGTCAGATCCTAGCGTTGAATGCCAGGGG',
+  insulin: 'ATGGCCCTGTGGATGCGCCTCCTGCCCCTGCTGGCGCTGCTGGCCCTCTGGGGACCTGACCCAGCCGCAGCCTTTGTGAACCAACACCTGTGCGGCTCACACCTGGTGGAAGCTCTCTACCTAGTGTGCGGGGAACGAGGCTTCTTCTACACACCCAAGACCCGCCGGGAGGCAGAGGACCTGCAGGTGGGGCAGGTGGAGCTGGGCGGCGGCCCTGGTGCAGGCAGCCTGCAGCCCTTGGCCCTGGAG',
+  brca1:   'ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAATGCTATGCAGAAAATCTTAGAGTGTCCTGAATTATTTGAATGTGTGTCAACTGGACAATACAGAGAAGCTATGTCTATGTGATGAGAAATTTCAAACAGGCAAATGAAGATCAAAGAGTTCATGGCTTACTCTGGGCAGCTATCTTTTAATATAATAAATGAAAATGTTATAAATTTTGATTGTGATTTTTGG',
+  protein: 'MTEYKLVVVGAGGVGKSALTIQLIQNHFVDEYDPTIEDSY',
+  rna:     'AUGGCCUCGUGGAUGCGCCUCCUGCCCAUGCUGGCGCUGCUGGCCCUCUGGGGACCUGACCCAGCCGCAGCCUUUGUGAACCAACACCTGUGCGGCUCACACCUGGUGGA'
+};
+
+function loadSample(k, toBlast=false) {
+  const v = (SAMPLES[k]||'').replace(/\s/g,'');
+  const id = toBlast ? 'blastInput' : 'seqInput';
+  document.getElementById(id).value = v;
+  if (!toBlast) updateTypeLabel(v);
+}
+
+function updateTypeLabel(s) {
+  const seq = s.replace(/[\s>][^\n]*/g,'').replace(/\s/g,'').toUpperCase();
+  const el = document.getElementById('seqTypeLabel');
+  if (!el || !seq) { if(el) el.textContent=''; return; }
+  const c = new Set(seq);
+  if ([...c].every(x=>'ATGCN'.includes(x))) el.textContent = '● DNA';
+  else if ([...c].every(x=>'AUGCN'.includes(x))) el.textContent = '● RNA';
+  else if ([...c].every(x=>'ACDEFGHIKLMNPQRSTVWYX*'.includes(x))) el.textContent = '● PROTEIN';
+  else el.textContent = '';
+}
+document.getElementById('seqInput').addEventListener('input', e => updateTypeLabel(e.target.value));
+
+// ── TOOL SWITCHING ────────────────────────────
+function switchTool(name) {
+  document.querySelectorAll('.tool-section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.tnav').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tool-'+name).classList.add('active');
+  document.getElementById('nav-'+name).classList.add('active');
+}
+
+// ── HELP PANEL ────────────────────────────────
+function toggleHelp(){
+  document.getElementById('helpPanel').classList.toggle('open');
+  document.getElementById('helpOverlay').classList.toggle('open');
+}
+function closeHelp(){
+  document.getElementById('helpPanel').classList.remove('open');
+  document.getElementById('helpOverlay').classList.remove('open');
+}
+function toggleHelpSec(el){
+  el.classList.toggle('open');
+  el.nextElementSibling.classList.toggle('open');
+}
+function toggleTerm(el){
+  el.classList.toggle('open');
+  el.nextElementSibling.classList.toggle('open');
+}
+function filterHelp(q){
+  q=q.toLowerCase();
+  document.querySelectorAll('.help-item').forEach(item=>{
+    const vis=!q||item.textContent.toLowerCase().includes(q);
+    item.style.display=vis?'':'none';
+    if(q&&vis) item.querySelector('.help-def').classList.add('open');
+  });
+  document.querySelectorAll('.help-sec').forEach(sec=>{
+    const vis=[...sec.querySelectorAll('.help-item')].some(i=>i.style.display!=='none');
+    const items=sec.querySelector('.help-items'); const hd=sec.querySelector('.help-sec-hd');
+    if(items) items.classList.toggle('open',vis);
+    if(hd) hd.classList.toggle('open',vis);
+  });
+}
+
+// ── CHART MANAGEMENT ─────────────────────────
+let CH={};
+function destroyCharts(){ Object.values(CH).forEach(c=>{try{c.destroy()}catch(e){}});CH={}; }
+function mkAxis(extra={}){return{ticks:{color:'#3a5f70',font:{family:"'IBM Plex Mono'",size:9},...(extra.ticks||{})},grid:{color:'rgba(23,38,48,0.9)'},...extra};}
+function mkLegend(show=false){return{display:show,labels:{color:'#6b96a8',font:{family:"'IBM Plex Mono'",size:10}}};}
+function mkLine(id,data,xk,yk,label,color,fill,yExtra={}){
+  const ctx=document.getElementById(id);
+  if(!ctx||CH[id]||!data||!data.length)return;
+  CH[id]=new Chart(ctx,{type:'line',data:{labels:data.map(p=>p[xk]),datasets:[{label,data:data.map(p=>p[yk]),borderColor:color,backgroundColor:fill,borderWidth:1.5,pointRadius:0,fill:true,tension:0.4}]},
+    options:{scales:{x:{...mkAxis({ticks:{maxTicksLimit:8}}),},y:{...mkAxis(),...yExtra}},plugins:{legend:mkLegend()}}});
+}
+
+// ── TOOL 1: SINGLE SEQUENCE ───────────────────
+async function runAnalyze(){
+  const seq=document.getElementById('seqInput').value.trim();
+  if(!seq){showErr('errMsg','Paste a sequence first!');return;}
+  const apiKey=document.getElementById('apiKey').value.trim();
+  hideErr('errMsg');
+  const btn=document.getElementById('analyzeBtn');
+  btn.disabled=true; btn.textContent='⏳  Analyzing…';
+  const rp=document.getElementById('rightPanel');
+  rp.innerHTML='<div class="loading show"><div style="font-size:0.84rem">Running deep analysis…</div><div class="load-bar"></div><div class="load-sub">Calculating: GC · ORFs · Restriction Map · Thermodynamics · Primers · Skew · Entropy…</div></div>';
+  destroyCharts();
+  try{
+    const res=await fetch('/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sequence:seq,api_key:apiKey})});
+    const d=await res.json();
+    if(!res.ok)throw new Error(d.error||'Analysis failed');
+    renderResults(d,rp);
+  }catch(e){
+    rp.innerHTML='<div class="empty-state"><div class="empty-icon">⚠</div><div class="empty-title">Error</div><div class="empty-sub">'+escHtml(e.message)+'</div></div>';
+    showErr('errMsg',e.message);
+  }finally{btn.disabled=false;btn.textContent='▶  Run Deep Analysis';}
+}
+
+function showErr(id,msg){const el=document.getElementById(id);if(el){el.textContent='⚠ '+msg;el.classList.add('show');}}
+function hideErr(id){const el=document.getElementById(id);if(el)el.classList.remove('show');}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ── RENDER RESULTS ────────────────────────────
+function renderResults(d,container){
+  container.innerHTML='';
+  const isDNA=d.type==='DNA'||d.type==='RNA';
+  const isProt=d.type==='PROTEIN';
+
+  // Tiles
+  const tiles=document.createElement('div');
+  tiles.className='tile-grid';
+  if(isDNA){
+    const s=d.stats,m=d.melting;
+    const gc=s.gc;
+    tiles.innerHTML=`
+      <div class="stat-tile"><div class="tile-lbl">Type</div><div class="tile-val va">${d.type}</div><div class="tile-sub">${d.length.toLocaleString()} bp</div></div>
+      <div class="stat-tile"><div class="tile-lbl">GC Content</div><div class="tile-val ${gc<40?'vc':gc>60?'vr':'vg'}">${gc}<span style="font-size:0.85rem">%</span></div><div class="tile-sub">${gc<40?'AT-rich':gc>60?'GC-rich':'Balanced'}</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Tm (NN method)</div><div class="tile-val vr">${m.nearest_neighbor}<span style="font-size:0.72rem">°C</span></div><div class="tile-sub">Wallace: ${m.wallace}°C</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Mol. Weight</div><div class="tile-val va" style="font-size:1.05rem">${(d.mw/1000).toFixed(2)}<span style="font-size:0.65rem"> kDa</span></div></div>
+      <div class="stat-tile"><div class="tile-lbl">ORFs Found</div><div class="tile-val vp">${d.orfs.length}</div><div class="tile-sub">All 6 frames</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Restriction Sites</div><div class="tile-val vg">${d.restriction.length}</div><div class="tile-sub">Unique enzymes</div></div>
+      <div class="stat-tile"><div class="tile-lbl">CpG Islands</div><div class="tile-val vc">${d.cpg_islands.length}</div><div class="tile-sub">Epigenetic</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Complexity</div><div class="tile-val vpk">${d.entropy.complexity_pct}<span style="font-size:0.85rem">%</span></div><div class="tile-sub">Shannon entropy</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Microsatellites</div><div class="tile-val vp">${d.microsatellites.length}</div><div class="tile-sub">SSR repeats</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Promoter Elements</div><div class="tile-val va">${(d.promoter_elements||[]).length}</div><div class="tile-sub">TATA/Kozak/SD</div></div>`;
+  }else if(isProt){
+    tiles.innerHTML=`
+      <div class="stat-tile"><div class="tile-lbl">Mol. Weight</div><div class="tile-val va" style="font-size:1.05rem">${(d.protein_mw/1000).toFixed(3)}<span style="font-size:0.65rem"> kDa</span></div></div>
+      <div class="stat-tile"><div class="tile-lbl">pI</div><div class="tile-val vc">${d.pi}</div><div class="tile-sub">${d.pi<7?'Acidic':'Basic'}</div></div>
+      <div class="stat-tile"><div class="tile-lbl">GRAVY</div><div class="tile-val ${d.gravy>0?'vg':'vr'}">${d.gravy}</div><div class="tile-sub">${d.gravy>0?'Hydrophobic':'Hydrophilic'}</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Instability</div><div class="tile-val ${d.instability<40?'vg':'vr'}">${d.instability}</div><div class="tile-sub">${d.instability<40?'Stable':'Unstable'}</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Aromaticity</div><div class="tile-val vp">${d.aromaticity}<span style="font-size:0.8rem">%</span></div><div class="tile-sub">F+Y+W content</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Net Charge pH 7</div><div class="tile-val ${d.charge_at_7>0?'vc':'vr'}">${d.charge_at_7}</div></div>
+      <div class="stat-tile"><div class="tile-lbl">TM Helices</div><div class="tile-val va">${(d.tm_helices||[]).length}</div><div class="tile-sub">Membrane spans</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Signal Peptide</div><div class="tile-val ${d.signal_peptide&&d.signal_peptide.detected?'vg':'vr'}">${d.signal_peptide&&d.signal_peptide.detected?'YES':'NO'}</div></div>`;
+  }
+  container.appendChild(tiles);
+
+  // Tabs
+  const wrap=document.createElement('div'); wrap.className='tabs-wrap';
+  const tabBar=document.createElement('div'); tabBar.className='tab-bar';
+  let defs=[];
+  if(isDNA) defs=[{id:'overview',lb:'01 Composition'},{id:'skew',lb:'02 Skew'},{id:'orfs',lb:'03 ORFs'},{id:'restrict',lb:'04 Restriction'},{id:'features',lb:'05 Features'},{id:'codons',lb:'06 Codons'},{id:'thermo',lb:'07 Thermo'},{id:'primers',lb:'08 Primers'}];
+  else defs=[{id:'prot_ov',lb:'01 Overview'},{id:'prot_hydro',lb:'02 Hydrophobicity'},{id:'prot_charge',lb:'03 Charge / pH'},{id:'prot_comp',lb:'04 Composition'}];
+  if(d.ai_analysis) defs.push({id:'ai',lb:'✦ AI'});
+
+  defs.forEach((t,i)=>{
+    const btn=document.createElement('div');
+    btn.className='tab'+(i===0?' active':''); btn.textContent=t.lb; btn.dataset.tab=t.id;
+    btn.onclick=()=>{
+      tabBar.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      wrap.querySelectorAll('.tab-content').forEach(x=>x.classList.remove('active'));
+      btn.classList.add('active');
+      const tc=wrap.querySelector('#tc-'+t.id); if(tc) tc.classList.add('active');
+      setTimeout(()=>renderCharts(d),40);
+    };
+    tabBar.appendChild(btn);
+  });
+  wrap.appendChild(tabBar);
+
+  function mkTC(id,active){const d=document.createElement('div');d.id='tc-'+id;d.className='tab-content'+(active?' active':'');return d;}
+
+  if(isDNA){
+    wrap.appendChild(buildOverviewTab(d,mkTC));
+    wrap.appendChild(buildSkewTab(d,mkTC));
+    wrap.appendChild(buildORFTab(d,mkTC));
+    wrap.appendChild(buildRestrictTab(d,mkTC));
+    wrap.appendChild(buildFeaturesTab(d,mkTC));
+    wrap.appendChild(buildCodonsTab(d,mkTC));
+    wrap.appendChild(buildThermoTab(d,mkTC));
+    wrap.appendChild(buildPrimersTab(d,mkTC));
+  }else{
+    wrap.appendChild(buildProtOvTab(d,mkTC));
+    wrap.appendChild(buildHydroTab(d,mkTC));
+    wrap.appendChild(buildChargeTab(d,mkTC));
+    wrap.appendChild(buildProtCompTab(d,mkTC));
+  }
+  if(d.ai_analysis){
+    const t=mkTC('ai',false);
+    const modelBadge = d.ai_model
+      ? `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;background:rgba(240,180,41,0.1);border:1px solid rgba(240,180,41,0.3);border-radius:20px;font-size:0.58rem;font-family:'IBM Plex Mono',monospace;color:var(--amber);margin-bottom:14px">⚡ ${escHtml(d.ai_model)}</span>`
+      : '';
+    // Format response: convert numbered sections and newlines to readable HTML
+    const formatted = escHtml(d.ai_analysis)
+      .replace(/\n\n/g,'</p><p style="margin-top:12px">')
+      .replace(/\n/g,'<br>')
+      .replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')
+      .replace(/(\d+\.\s+[A-Z ]+—)/g,'<b style="color:var(--amber)">$1</b>');
+    t.innerHTML=`<div class="ai-card">
+      ${modelBadge}
+      <div class="ai-text">
+        <p style="margin:0">${formatted}</p>
+      </div>
+    </div>
+    <div style="margin-top:10px;font-size:0.65rem;color:var(--text3)">AI output — always verify with primary literature.</div>`;
+    wrap.appendChild(t);
+  }
+  container.appendChild(wrap);
+
+  // Export bar
+  const exp=document.createElement('div'); exp.className='export-bar';
+  exp.innerHTML='<button class="export-btn" onclick="exportPDF()">⬇ PDF Report</button><button class="export-btn blue" onclick="exportCSV()">⬇ CSV</button>';
+  container.appendChild(exp);
+  window._last=d;
+  setTimeout(()=>renderCharts(d),60);
+}
+
+// ── DNA TAB BUILDERS ──────────────────────────
+function buildOverviewTab(d,mkTC){
+  const t=mkTC('overview',true); const s=d.stats;
+  t.innerHTML=`
+    <div class="sec-head">Nucleotide Composition</div>
+    <div style="display:grid;grid-template-columns:170px 1fr;gap:14px;margin-bottom:14px;align-items:center">
+      <div class="chart-box" style="margin:0"><canvas id="chartBase" height="170"></canvas></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${[['A','Adenine','vc'],['T','Thymine','vg'],['G','Guanine','va'],['C','Cytosine','vp']].map(([b,n,c])=>`
+        <div class="stat-tile"><div class="tile-lbl">${n}</div><div class="tile-val ${c}" style="font-size:1.2rem">${s.counts[b]}</div><div class="tile-sub">${((s.counts[b]/s.length)*100).toFixed(1)}%</div></div>`).join('')}
+        <div class="stat-tile"><div class="tile-lbl">Purine A+G</div><div class="tile-val va" style="font-size:1rem">${s.purine}%</div></div>
+        <div class="stat-tile"><div class="tile-lbl">AT Content</div><div class="tile-val vc" style="font-size:1rem">${s.at}%</div></div>
+      </div>
+    </div>
+    <div class="sec-head">GC Content Sliding Window (100 bp)</div>
+    <div class="chart-box"><canvas id="chartGC" height="130"></canvas></div>
+    <div class="sec-head" style="margin-top:4px">Dinucleotide Frequencies <span style="color:var(--text3);font-size:0.56rem;font-weight:400;font-family:monospace">— purple bar = CG (CpG methylation site)</span></div>
+    <div class="chart-box"><canvas id="chartDi" height="120"></canvas></div>
+    <div class="sec-head" style="margin-top:4px">Strands</div>
+    <div style="font-size:0.54rem;color:var(--text3);font-family:'IBM Plex Mono',monospace;margin-bottom:3px;letter-spacing:0.12em">COMPLEMENT (5'→3')</div>
+    <div class="seq-display" style="color:var(--cyan)">${d.complement}${d.complement.length>=100?'…':''}</div>
+    <div style="font-size:0.54rem;color:var(--text3);font-family:'IBM Plex Mono',monospace;margin-bottom:3px;letter-spacing:0.12em">REVERSE COMPLEMENT (5'→3')</div>
+    <div class="seq-display" style="color:var(--amber)">${d.rev_complement}${d.rev_complement.length>=100?'…':''}</div>
+    <div class="sec-head" style="margin-top:4px">All 6 Reading Frames (first 80 aa)</div>
+    <table class="data-table"><thead><tr><th>Frame</th><th>Dir</th><th>Translation</th></tr></thead><tbody>
+    ${(d.six_frames||[]).map(f=>`<tr>
+      <td style="color:var(--amber);font-family:'IBM Plex Mono'">${f.frame}</td>
+      <td><span class="badge ${f.frame.startsWith('+')?'bg':'bp'}">${f.frame.startsWith('+')?'+':'-'}</span></td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:0.64rem;color:var(--text2)">${f.translation||f.protein||''}</td>
+    </tr>`).join('')}
+    </tbody></table>`;
+  return t;
+}
+
+function buildSkewTab(d,mkTC){
+  const t=mkTC('skew',false);
+  t.innerHTML=`
+    <div class="sec-head">GC Skew — (G−C)/(G+C) per window</div>
+    <div style="font-size:0.7rem;color:var(--text3);margin-bottom:9px;line-height:1.65">Positive value = more G than C on this strand. The pattern reverses at bacterial replication origins, making this useful to locate where DNA replication begins and ends.</div>
+    <div class="chart-box"><canvas id="chartGCSkew" height="130"></canvas></div>
+    <div class="sec-head" style="margin-top:4px">AT Skew — (A−T)/(A+T) per window</div>
+    <div class="chart-box"><canvas id="chartATSkew" height="130"></canvas></div>
+    <div class="sec-head" style="margin-top:4px">Cumulative GC Skew</div>
+    <div style="font-size:0.7rem;color:var(--text3);margin-bottom:9px;line-height:1.65">Running sum of GC skew along the sequence. In circular bacterial genomes: minimum = replication terminus, maximum = replication origin.</div>
+    <div class="chart-box"><canvas id="chartCumSkew" height="130"></canvas></div>`;
+  return t;
+}
+
+function buildORFTab(d,mkTC){
+  const t=mkTC('orfs',false);
+  const cols=['rgba(52,211,153','rgba(34,211,238','rgba(240,180,41','rgba(192,132,252','rgba(248,113,113','rgba(244,114,182'];
+  let lanes='';
+  d.orfs.slice(0,20).forEach((o,i)=>{
+    const l=(o.start/d.length*100).toFixed(2);
+    const w=Math.max((o.end-o.start)/d.length*100,0.4).toFixed(2);
+    const c=cols[i%6];
+    lanes+=`<div class="orf-lane"><div class="orf-bar" style="left:${l}%;width:${w}%;background:${c},0.18);border-color:${c},0.65);color:${c},1)" title="${o.frame} ${o.strand} ${o.start}–${o.end} | ${o.protein_len} aa">${o.frame} ${o.protein_len}aa</div></div>`;
+  });
+  const rows=d.orfs.slice(0,20).map(o=>`<tr>
+    <td style="color:var(--amber);font-family:'IBM Plex Mono'">${o.frame}</td>
+    <td><span class="badge ${o.strand==='+'?'bg':'bp'}">${o.strand}</span></td>
+    <td style="color:var(--cyan)">${o.start}</td><td>${o.end}</td>
+    <td>${o.length} bp</td><td style="color:var(--green)">${o.protein_len} aa</td>
+    <td style="font-family:'IBM Plex Mono',monospace;font-size:0.6rem;color:var(--text2)">${(o.protein||'').substring(0,30)}${(o.protein||'').length>30?'…':''}</td>
+  </tr>`).join('');
+  t.innerHTML=`
+    <div class="sec-head">ORF Map — ${d.orfs.length} ORFs (longer bar = more likely real gene)</div>
+    <div class="orf-map">${lanes||'<div style="color:var(--text3);padding:8px;font-size:0.74rem">No ORFs found (sequence too short or non-coding)</div>'}</div>
+    <div class="sec-head" style="margin-top:4px">ORF Table</div>
+    <table class="data-table"><thead><tr><th>Frame</th><th>Strand</th><th>Start</th><th>End</th><th>Length</th><th>Protein</th><th>Sequence</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return t;
+}
+
+function buildRestrictTab(d,mkTC){
+  const t=mkTC('restrict',false);
+  const cols=['var(--green)','var(--cyan)','var(--amber)','var(--purple)','var(--pink)','var(--red)'];
+  let lanes=d.restriction.slice(0,24).map((r,i)=>{
+    const col=cols[i%6];
+    const marks=r.sites.map(pos=>{
+      const pct=(pos/d.length*100).toFixed(2);
+      return `<div class="remap-site" style="left:${pct}%;border-color:${col};color:${col}">${r.enzyme}</div>`;
+    }).join('');
+    return `<div class="remap-lane"><div class="remap-line"></div>${marks}</div>`;
+  }).join('');
+  const rows=d.restriction.map(r=>`<tr>
+    <td style="color:var(--amber);font-weight:600">${r.enzyme}</td>
+    <td style="font-family:'IBM Plex Mono';color:var(--cyan)">${r.pattern}</td>
+    <td style="color:var(--green)">${r.count}</td>
+    <td style="font-size:0.66rem;color:var(--text2)">${r.sites.slice(0,5).join(', ')}${r.sites.length>5?'…':''}</td>
+    <td style="color:var(--text3)">${r.note}</td>
+  </tr>`).join('');
+  t.innerHTML=`
+    <div class="sec-head">Visual Map — ${d.restriction.length} enzymes cut here</div>
+    <div class="remap">${lanes||'<div style="color:var(--text3);padding:8px;font-size:0.74rem">No restriction sites found</div>'}</div>
+    <div class="sec-head" style="margin-top:12px">All Sites</div>
+    <table class="data-table"><thead><tr><th>Enzyme</th><th>Pattern</th><th>Cuts</th><th>Positions</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return t;
+}
+
+function buildFeaturesTab(d,mkTC){
+  const t=mkTC('features',false);
+  const msRows=(d.microsatellites||[]).slice(0,15).map(m=>`<tr>
+    <td style="color:var(--cyan);font-family:'IBM Plex Mono'">${m.motif}</td>
+    <td>${m.start}</td><td>${m.end}</td>
+    <td style="color:var(--amber)">${m.repeats}×</td><td>${m.total_len} bp</td>
+  </tr>`).join('');
+  const cpgRows=(d.cpg_islands||[]).slice(0,10).map(c=>`<tr><td>${c.start}</td><td>${c.end}</td><td style="color:var(--green)">${c.length} bp</td></tr>`).join('');
+  const palRows=(d.palindromes||[]).slice(0,10).map(p=>`<tr><td>${p.position||p.start||0}</td><td style="font-family:'IBM Plex Mono';color:var(--cyan)">${p.sequence||p.seq||''}</td><td>${p.length||0} bp</td></tr>`).join('');
+  const prRows=(d.promoter_elements||[]).map(e=>`<tr><td style="color:var(--amber)">${e.type}</td><td>${e.position}</td><td style="font-family:'IBM Plex Mono';color:var(--cyan)">${e.sequence}</td><td style="color:var(--text3)">${e.note||''}</td></tr>`).join('');
+  const rna=d.rna_fold;
+  t.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div>
+        <div class="sec-head">Microsatellites / SSRs (${(d.microsatellites||[]).length})</div>
+        <table class="data-table"><thead><tr><th>Motif</th><th>Start</th><th>End</th><th>Reps</th><th>Len</th></tr></thead><tbody>${msRows||'<tr><td colspan="5" style="color:var(--text3)">None found</td></tr>'}</tbody></table>
+        <div class="sec-head" style="margin-top:12px">CpG Islands (${(d.cpg_islands||[]).length})</div>
+        <table class="data-table"><thead><tr><th>Start</th><th>End</th><th>Length</th></tr></thead><tbody>${cpgRows||'<tr><td colspan="3" style="color:var(--text3)">None found</td></tr>'}</tbody></table>
+      </div>
+      <div>
+        <div class="sec-head">Promoter Elements</div>
+        <table class="data-table"><thead><tr><th>Type</th><th>Pos</th><th>Sequence</th><th>Note</th></tr></thead><tbody>${prRows||'<tr><td colspan="4" style="color:var(--text3)">None found</td></tr>'}</tbody></table>
+        <div class="sec-head" style="margin-top:12px">Palindromic Sites</div>
+        <table class="data-table"><thead><tr><th>Pos</th><th>Sequence</th><th>Len</th></tr></thead><tbody>${palRows||'<tr><td colspan="3" style="color:var(--text3)">None found</td></tr>'}</tbody></table>
+        ${rna?`<div class="sec-head" style="margin-top:12px">RNA Secondary Structure (Nussinov)</div>
+        <div style="background:#020810;border:1px solid var(--border);border-radius:7px;padding:11px;font-family:'IBM Plex Mono',monospace;font-size:0.65rem">
+          <div style="color:var(--green);word-break:break-all;line-height:2">${rna.sequence||''}</div>
+          <div style="color:var(--amber);word-break:break-all;line-height:2">${rna.structure||''}</div>
+          <div style="color:var(--text3);margin-top:5px">Base pairs: ${rna.base_pairs||rna.pairs||0} · Approx MFE: ${rna.mfe_approx||rna.energy||'?'} kcal/mol</div>
+        </div>`:''}
+      </div>
+    </div>`;
+  return t;
+}
+
+function buildCodonsTab(d,mkTC){
+  const t=mkTC('codons',false);
+  const cu=d.codon_usage||{};
+  const maxC=Math.max(1,...Object.values(cu).map(v=>v.count));
+  const cells=Object.entries(cu).map(([cod,v])=>{
+    const frac=v.count/maxC;
+    const r=Math.round(240*frac),g=Math.round(180*frac),b=Math.round(41*frac);
+    const tc=frac>0.45?'#fff':'#6b96a8';
+    return `<div class="codon-cell" style="background:rgba(${r},${g},${b},${0.12+frac*0.72})" title="${cod}=${v.aa}: ${v.count}×"><div class="cod" style="color:${tc}">${cod}</div><div class="cnt" style="color:${tc}">${v.count}</div></div>`;
+  }).join('');
+  t.innerHTML=`
+    <div class="sec-head">Top 20 Most Used Codons</div>
+    <div class="chart-box"><canvas id="chartCodon" height="150"></canvas></div>
+    <div class="sec-head" style="margin-top:4px">Full Codon Heatmap (all 64) — brighter = more frequent</div>
+    <div style="font-size:0.68rem;color:var(--text3);margin-bottom:6px">Hover over any cell to see codon, amino acid, and count</div>
+    <div class="codon-grid">${cells}</div>`;
+  return t;
+}
+
+function buildThermoTab(d,mkTC){
+  const t=mkTC('thermo',false);
+  const m=d.melting; const en=d.entropy;
+  t.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+      <div>
+        <div class="sec-head">Melting Curve (simulated)</div>
+        <div class="chart-box"><canvas id="chartMelt" height="170"></canvas></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="stat-tile"><div class="tile-lbl">Wallace Rule</div><div class="tile-val va">${m.wallace}<span style="font-size:0.75rem">°C</span></div><div class="tile-sub">Quick formula</div></div>
+          <div class="stat-tile"><div class="tile-lbl">Nearest-Neighbor</div><div class="tile-val vr">${m.nearest_neighbor}<span style="font-size:0.75rem">°C</span></div><div class="tile-sub">More accurate</div></div>
+        </div>
+      </div>
+      <div>
+        <div class="sec-head">Sequence Complexity</div>
+        <div class="chart-box"><canvas id="chartEntropy" height="170"></canvas></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="stat-tile"><div class="tile-lbl">Shannon Entropy</div><div class="tile-val vc">${en.entropy}</div><div class="tile-sub">bits/symbol</div></div>
+          <div class="stat-tile"><div class="tile-lbl">Complexity %</div><div class="tile-val vpk">${en.complexity_pct}<span style="font-size:0.75rem">%</span></div><div class="tile-sub">of theoretical max</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="sec-head">Direct Repeats</div>
+    <table class="data-table"><thead><tr><th>Sequence</th><th>Positions (pos1 / pos2)</th><th>Length</th></tr></thead><tbody>
+    ${(d.repeats||[]).slice(0,10).map(r=>`<tr><td style="font-family:'IBM Plex Mono';color:var(--cyan)">${r.sequence}</td><td style="color:var(--amber)">${r.pos1} &amp; ${r.pos2}</td><td>${r.length} bp</td></tr>`).join('')||'<tr><td colspan="3" style="color:var(--text3)">None found</td></tr>'}
+    </tbody></table>`;
+  return t;
+}
+
+function buildPrimersTab(d,mkTC){
+  const t=mkTC('primers',false);
+  const p=d.primers||{}; const f=p.forward||{}; const rv=p.reverse||{};
+  const bar=s=>`<div style="height:5px;background:var(--border);border-radius:3px;margin-top:5px"><div style="height:100%;width:${Math.min(100,s/8*100)}%;background:linear-gradient(90deg,var(--green),var(--cyan));border-radius:3px"></div></div>`;
+  t.innerHTML=`
+    <div class="sec-head">Primer Pair (20 bp)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div style="background:var(--panel2);border:1px solid var(--border);border-radius:9px;padding:14px">
+        <div class="tile-lbl" style="margin-bottom:6px">Forward Primer (5'→3')</div>
+        <div class="primer-seq">${f.sequence||'N/A'}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">
+          <span class="badge bc">Tm ${f.tm||'?'}°C</span>
+          <span class="badge ba">GC ${f.gc||'?'}%</span>
+          <span class="badge bg">Score ${f.score||0}/8</span>
+        </div>${bar(f.score||0)}
+      </div>
+      <div style="background:var(--panel2);border:1px solid var(--border);border-radius:9px;padding:14px">
+        <div class="tile-lbl" style="margin-bottom:6px">Reverse Primer (5'→3')</div>
+        <div class="primer-seq" style="color:var(--cyan)">${rv.sequence||'N/A'}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">
+          <span class="badge bc">Tm ${rv.tm||'?'}°C</span>
+          <span class="badge ba">GC ${rv.gc||'?'}%</span>
+          <span class="badge bg">Score ${rv.score||0}/8</span>
+        </div>${bar(rv.score||0)}
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <span class="badge bg">PCR Product: ${p.product_size||'?'} bp</span>
+      <span class="badge ba">ΔTm: ${Math.abs((f.tm||0)-(rv.tm||0)).toFixed(1)}°C</span>
+    </div>
+    <div style="padding:12px;background:rgba(240,180,41,0.04);border:1px solid rgba(240,180,41,0.14);border-radius:7px;font-size:0.7rem;color:var(--text2);line-height:1.75">
+      💡 <b style="color:var(--amber)">Tip:</b> This is a quick basic primer. For more options tested across lengths 18–24 bp with full hairpin/dimer checking, use the <b>Advanced Primers</b> tool (top navigation bar).
+    </div>`;
+  return t;
+}
+
+// ── PROTEIN TAB BUILDERS ──────────────────────
+function buildProtOvTab(d,mkTC){
+  const t=mkTC('prot_ov',true); const sec=d.secondary||{};
+  const tmRows=(d.tm_helices||[]).map((h,i)=>`<tr><td style="color:var(--amber)">Helix ${i+1}</td><td>${h.start}</td><td>${h.end}</td><td>${h.length} aa</td></tr>`).join('');
+  t.innerHTML=`
+    <div style="display:grid;grid-template-columns:160px 1fr;gap:14px;margin-bottom:14px;align-items:center">
+      <div class="chart-box" style="margin:0"><canvas id="chartSecStr" height="160"></canvas></div>
+      <div>
+        <div class="sec-head">Structure Prediction (Chou-Fasman)</div>
+        <div class="stat-tile" style="margin-bottom:8px">
+          <div class="tile-lbl">Most Likely Structure</div>
+          <div class="tile-val va" style="font-size:0.95rem">${sec.likely||'N/A'}</div>
+          <div class="tile-sub">Helix score: ${sec.helix_score} · Sheet score: ${sec.sheet_score}</div>
+        </div>
+        ${d.signal_peptide&&d.signal_peptide.detected?`<div style="padding:9px 12px;background:rgba(52,211,153,0.07);border:1px solid rgba(52,211,153,0.18);border-radius:7px;font-size:0.7rem">
+          <div style="color:var(--green);font-weight:600;margin-bottom:3px">✓ Signal Peptide Detected</div>
+          <div style="color:var(--text3)">Residues 1–${d.signal_peptide.length||20}. Protein is likely secreted or membrane-bound.</div>
+        </div>`:''}
+      </div>
+    </div>
+    <div class="sec-head">Amino Acid Composition</div>
+    <div class="chart-box"><canvas id="chartAA" height="150"></canvas></div>
+    ${(d.tm_helices||[]).length?`<div class="sec-head" style="margin-top:4px">Transmembrane Helices (${d.tm_helices.length})</div>
+    <table class="data-table"><thead><tr><th>Helix #</th><th>Start</th><th>End</th><th>Length</th></tr></thead><tbody>${tmRows}</tbody></table>`:''}`;
+  return t;
+}
+
+function buildHydroTab(d,mkTC){
+  const t=mkTC('prot_hydro',false);
+  t.innerHTML=`
+    <div class="sec-head">Hydrophobicity Profile (Kyte-Doolittle, window = 9 aa)</div>
+    <div style="font-size:0.7rem;color:var(--text3);margin-bottom:9px;line-height:1.65">Regions above the red dashed line (+1.6) for 20+ amino acids in a row = likely transmembrane helices. Below zero = hydrophilic (water-facing) regions.</div>
+    <div class="chart-box"><canvas id="chartHydro" height="190"></canvas></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:4px">
+      <div class="stat-tile"><div class="tile-lbl">GRAVY Score</div><div class="tile-val ${d.gravy>0?'vg':'vr'}">${d.gravy}</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Character</div><div style="font-size:0.76rem;color:var(--text);margin-top:6px">${d.gravy>1.5?'Strongly hydrophobic — likely membrane protein':d.gravy>0?'Mildly hydrophobic':'Hydrophilic — likely soluble'}</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Likely Location</div><div style="font-size:0.76rem;color:var(--text);margin-top:6px">${d.gravy>0?'Membrane / lipid bilayer':'Cytoplasm / extracellular'}</div></div>
+    </div>`;
+  return t;
+}
+
+function buildChargeTab(d,mkTC){
+  const t=mkTC('prot_charge',false);
+  t.innerHTML=`
+    <div class="sec-head">Net Charge vs pH (0–14)</div>
+    <div style="font-size:0.7rem;color:var(--text3);margin-bottom:9px;line-height:1.65">Shows total protein charge across the entire pH range. Where the curve crosses zero = pI (${d.pi}). At body pH 7.4, this protein has a net charge of <b style="color:var(--cyan)">${d.charge_at_7}</b>.</div>
+    <div class="chart-box"><canvas id="chartCharge" height="200"></canvas></div>
+    <div class="sec-head" style="margin-top:4px">Ionizable Residues (affect the curve)</div>
+    <table class="data-table"><thead><tr><th>Residue</th><th>Count in protein</th><th>pKa</th><th>Charge at pH 7.4</th></tr></thead><tbody>
+      ${[['Aspartate (D)','D',3.9,'Negative (−1)','vr'],['Glutamate (E)','E',4.1,'Negative (−1)','vr'],
+         ['Histidine (H)','H',6.0,'~Neutral',''],['Cysteine (C)','C',8.3,'Slightly negative',''],
+         ['Tyrosine (Y)','Y',10.1,'Slightly negative',''],['Lysine (K)','K',10.5,'Positive (+1)','vg'],
+         ['Arginine (R)','R',12.5,'Positive (+1)','vg']].map(([name,code,pka,charge,cls])=>`<tr>
+        <td>${name}</td>
+        <td style="color:var(--amber)">${d.aa_composition&&d.aa_composition[code]?d.aa_composition[code].count:0}</td>
+        <td style="font-family:'IBM Plex Mono'">${pka}</td>
+        <td class="${cls}">${charge}</td>
+      </tr>`).join('')}
+    </tbody></table>`;
+  return t;
+}
+
+function buildProtCompTab(d,mkTC){
+  const t=mkTC('prot_comp',false);
+  const rows=Object.entries(d.aa_composition||{}).sort((a,b)=>b[1].count-a[1].count).map(([aa,v])=>`<tr>
+    <td style="color:var(--amber);font-weight:600;font-family:'IBM Plex Mono'">${aa}</td>
+    <td style="color:var(--cyan)">${v.count}</td><td>${v.pct}%</td>
+    <td><div style="height:5px;background:var(--border);border-radius:3px"><div style="height:100%;width:${Math.min(100,v.pct*5)}%;background:linear-gradient(90deg,var(--amber),var(--cyan));border-radius:3px"></div></div></td>
+  </tr>`).join('');
+  t.innerHTML=`<div class="sec-head">Amino Acid Composition</div><table class="data-table"><thead><tr><th>AA</th><th>Count</th><th>%</th><th>Proportion</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return t;
+}
+
+// ── CHART RENDERING ───────────────────────────
+function renderCharts(d){
+  const isDNA=d.type==='DNA'||d.type==='RNA';
+  if(isDNA){
+    // Base doughnut
+    const bCtx=document.getElementById('chartBase');
+    if(bCtx&&!CH.base){const s=d.stats;
+      CH.base=new Chart(bCtx,{type:'doughnut',data:{labels:['A','T','G','C'],datasets:[{data:[s.counts.A,s.counts.T,s.counts.G,s.counts.C],backgroundColor:['rgba(34,211,238,0.7)','rgba(52,211,153,0.7)','rgba(240,180,41,0.7)','rgba(192,132,252,0.7)'],borderColor:['#22d3ee','#34d399','#f0b429','#c084fc'],borderWidth:1.5}]},options:{plugins:{legend:mkLegend(true)},cutout:'62%'}});}
+    // GC window
+    mkLine('chartGC',d.gc_window,'pos','gc','GC%','#22d3ee','rgba(34,211,238,0.06)',{min:0,max:100});
+    // Skew charts
+    if(d.gc_skew) mkLine('chartGCSkew',d.gc_skew,'pos','skew','GC Skew','#f0b429','rgba(240,180,41,0.06)',{min:-1,max:1});
+    if(d.at_skew) mkLine('chartATSkew',d.at_skew,'pos','skew','AT Skew','#c084fc','rgba(192,132,252,0.06)',{min:-1,max:1});
+    if(d.cumulative_skew) mkLine('chartCumSkew',d.cumulative_skew,'pos','skew','Cumulative GC Skew','#34d399','rgba(52,211,153,0.06)');
+    // Codon
+    const cCtx=document.getElementById('chartCodon');
+    if(cCtx&&!CH.codon){const top20=Object.entries(d.codon_usage||{}).filter(([,v])=>v.aa!=='*').sort((a,b)=>b[1].count-a[1].count).slice(0,20);
+      CH.codon=new Chart(cCtx,{type:'bar',data:{labels:top20.map(([c,v])=>`${c}(${v.aa})`),datasets:[{data:top20.map(([,v])=>v.count),backgroundColor:'rgba(240,180,41,0.28)',borderColor:'#f0b429',borderWidth:1}]},options:{scales:{x:mkAxis({ticks:{font:{size:7}}}),y:mkAxis()},plugins:{legend:mkLegend()}}});}
+    // Dinucleotide
+    const diCtx=document.getElementById('chartDi');
+    if(diCtx&&!CH.di){const ents=Object.entries(d.dinucleotide||{});
+      CH.di=new Chart(diCtx,{type:'bar',data:{labels:ents.map(([k])=>k),datasets:[{data:ents.map(([,v])=>v),backgroundColor:ents.map(([k])=>k==='CG'?'rgba(192,132,252,0.65)':'rgba(52,211,153,0.28)'),borderColor:ents.map(([k])=>k==='CG'?'#c084fc':'#34d399'),borderWidth:1}]},options:{scales:{x:mkAxis({ticks:{font:{size:7}}}),y:mkAxis()},plugins:{legend:mkLegend()}}});}
+    // Melting curve
+    const mCtx=document.getElementById('chartMelt');
+    if(mCtx&&!CH.melt){const tm=d.melting.nearest_neighbor;
+      const temps=[],vals=[];
+      for(let tt=tm-25;tt<=tm+25;tt+=2){temps.push(tt+'°C');vals.push(Math.round(100/(1+Math.exp(-(tt-tm)/4))));}
+      CH.melt=new Chart(mCtx,{type:'line',data:{labels:temps,datasets:[{label:'% Denatured',data:vals,borderColor:'#f87171',backgroundColor:'rgba(248,113,113,0.06)',borderWidth:2,pointRadius:0,fill:true,tension:0.4}]},options:{scales:{x:mkAxis(),y:{...mkAxis(),min:0,max:100,ticks:{...mkAxis().ticks,callback:v=>v+'%'}}},plugins:{legend:mkLegend()}}});}
+    // Entropy gauge
+    const eCtx=document.getElementById('chartEntropy');
+    if(eCtx&&!CH.entropy){
+      CH.entropy=new Chart(eCtx,{type:'doughnut',data:{labels:['Complexity','Remaining'],datasets:[{data:[d.entropy.complexity_pct,100-d.entropy.complexity_pct],backgroundColor:['rgba(244,114,182,0.7)','rgba(23,38,48,0.8)'],borderColor:['#f472b6','#172630'],borderWidth:1.5}]},options:{plugins:{legend:mkLegend(true)},cutout:'68%'}});}
+  }
+  // Protein charts
+  const aaCtx=document.getElementById('chartAA');
+  if(aaCtx&&!CH.aa&&d.aa_composition){const ents=Object.entries(d.aa_composition).sort((a,b)=>b[1].count-a[1].count);
+    CH.aa=new Chart(aaCtx,{type:'bar',data:{labels:ents.map(([aa])=>aa),datasets:[{data:ents.map(([,v])=>v.pct),backgroundColor:'rgba(240,180,41,0.32)',borderColor:'#f0b429',borderWidth:1}]},options:{scales:{x:mkAxis(),y:{...mkAxis(),title:{display:true,text:'%',color:'#3a5f70'}}},plugins:{legend:mkLegend()}}});}
+  const secCtx=document.getElementById('chartSecStr');
+  if(secCtx&&!CH.sec&&d.secondary){
+    CH.sec=new Chart(secCtx,{type:'radar',data:{labels:['α-Helix','β-Sheet'],datasets:[{data:[d.secondary.helix_score||0,d.secondary.sheet_score||0],backgroundColor:'rgba(34,211,238,0.13)',borderColor:'#22d3ee',pointBackgroundColor:'#22d3ee',borderWidth:2}]},options:{scales:{r:{ticks:{color:'#3a5f70',backdropColor:'transparent'},grid:{color:'rgba(23,38,48,0.85)'},angleLines:{color:'rgba(23,38,48,0.85)'}}},plugins:{legend:mkLegend()}}});}
+  // Hydrophobicity — key fix: use p.hydro not p.score
+  const hCtx=document.getElementById('chartHydro');
+  if(hCtx&&!CH.hydro&&d.hydro_profile&&d.hydro_profile.length){
+    CH.hydro=new Chart(hCtx,{type:'line',data:{labels:d.hydro_profile.map(p=>p.pos),datasets:[
+      {label:'Hydrophobicity',data:d.hydro_profile.map(p=>p.hydro),borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3},
+      {label:'TM threshold (1.6)',data:d.hydro_profile.map(()=>1.6),borderColor:'rgba(248,113,113,0.55)',borderDash:[5,4],borderWidth:1,pointRadius:0,fill:false}
+    ]},options:{scales:{x:mkAxis({ticks:{maxTicksLimit:10}}),y:{...mkAxis(),title:{display:true,text:'Hydrophobicity',color:'#3a5f70'}}},plugins:{legend:mkLegend(true)}}});}
+  // Charge vs pH — key fix: use charge_vs_ph (has {ph, charge}), not charge_profile (which has {pos, charge})
+  const chCtx=document.getElementById('chartCharge');
+  if(chCtx&&!CH.charge){
+    const cpData=d.charge_vs_ph||d.charge_profile||[];
+    // charge_vs_ph has {ph, charge}; charge_profile has {pos, charge} — handle both
+    const labels=cpData.map(p=>p.ph!==undefined?p.ph.toFixed(1):p.pos);
+    const values=cpData.map(p=>p.charge);
+    if(cpData.length){
+      CH.charge=new Chart(chCtx,{type:'line',data:{labels,datasets:[
+        {label:'Net Charge',data:values,borderColor:'#c084fc',backgroundColor:'rgba(192,132,252,0.06)',borderWidth:2,pointRadius:0,fill:true,tension:0.4},
+        {label:'Zero',data:cpData.map(()=>0),borderColor:'rgba(255,255,255,0.14)',borderDash:[4,4],borderWidth:1,pointRadius:0,fill:false}
+      ]},options:{scales:{x:{...mkAxis(),title:{display:true,text:d.charge_vs_ph?'pH':'Residue position',color:'#3a5f70'}},y:{...mkAxis(),title:{display:true,text:'Net Charge',color:'#3a5f70'}}},plugins:{legend:mkLegend(true)}}});}}
+}
+
+// ── EXPORT ────────────────────────────────────
+async function exportPDF(){
+  if(!window._last)return;
+  const res=await fetch('/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(window._last)});
+  const html=await res.text();
+  const w=window.open('','_blank'); w.document.write(html); w.document.close();
+  setTimeout(()=>w.print(),800);
+}
+function exportCSV(){
+  const d=window._last; if(!d)return;
+  const lines=['Property,Value',`Type,${d.type}`,`Length,${d.length}`];
+  if(d.stats){const s=d.stats;lines.push(`GC%,${s.gc}`,`AT%,${s.at}`,`A,${s.counts.A}`,`T,${s.counts.T}`,`G,${s.counts.G}`,`C,${s.counts.C}`,`MW_kDa,${(d.mw/1000).toFixed(2)}`,`Tm_NN,${d.melting.nearest_neighbor}`,`Tm_Wallace,${d.melting.wallace}`,`ORFs,${d.orfs.length}`,`Restriction_sites,${d.restriction.length}`,`CpG_islands,${d.cpg_islands.length}`,`Complexity%,${d.entropy.complexity_pct}`);}
+  if(d.protein_mw)lines.push(`MW_kDa,${(d.protein_mw/1000).toFixed(3)}`,`pI,${d.pi}`,`GRAVY,${d.gravy}`,`Instability,${d.instability}`);
+  dl(lines.join('\n'),'helix_result.csv','text/csv');
+}
+function dl(content,name,type){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url);}
+
+// ── TOOL 2: BATCH FASTA ───────────────────────
+function loadBatchSample(){document.getElementById('batchInput').value=`>TP53_exon6\nATGGAGGAGCCGCAGTCAGATCCTAGCGTTGAATGCCAGGGGCACAAABCCGGAGGATCATGACCCCC\n\n>Insulin_gene\nATGGCCCTGTGGATGCGCCTCCTGCCCCTGCTGGCGCTGCTGGCCCTCTGGGGACCTGACCCAGCC\n\n>BRCA1_frag\nATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAMTGTCATTAATGCTATGCAGAAAATCTTAGA\n\n>KRAS_oncogene\nATGACTGAATATAAACTTGTGGTAGTTGGAGCTGGTGGCGTAGGCAAGAGTGCCTTGACGATACAGC`;}
+
+async function runBatch(){
+  const fasta=document.getElementById('batchInput').value.trim();
+  if(!fasta){showErr('batchErr','Paste FASTA sequences first');return;}
+  hideErr('batchErr');
+  const btn=document.getElementById('batchBtn');
+  btn.disabled=true; btn.textContent='Analyzing…';
+  const el=document.getElementById('batchResults');
+  el.innerHTML='<div class="loading show"><div>Analyzing all sequences…</div><div class="load-bar"></div></div>';
+  try{
+    const res=await fetch('/batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fasta})});
+    const d=await res.json(); if(!res.ok)throw new Error(d.error);
+    renderBatch(d,el);
+  }catch(e){el.innerHTML='';showErr('batchErr',e.message);}
+  finally{btn.disabled=false; btn.textContent='⊞  Analyze All';}
+}
+
+function renderBatch(d,container){
+  const r=d.results; const isDNA=r[0]&&r[0].gc!==undefined;
+  let html=`<div class="tile-grid" style="margin-bottom:14px">
+    <div class="stat-tile"><div class="tile-lbl">Sequences</div><div class="tile-val va">${d.count}</div></div>
+    ${isDNA?`<div class="stat-tile"><div class="tile-lbl">Avg GC%</div><div class="tile-val vc">${(r.reduce((s,x)=>s+(x.gc||0),0)/r.length).toFixed(1)}%</div></div>
+    <div class="stat-tile"><div class="tile-lbl">Total ORFs</div><div class="tile-val vp">${r.reduce((s,x)=>s+(x.orfs||0),0)}</div></div>
+    <div class="stat-tile"><div class="tile-lbl">Avg Length</div><div class="tile-val vg">${Math.round(r.reduce((s,x)=>s+x.length,0)/r.length).toLocaleString()} bp</div></div>`:''}
+  </div>
+  <div class="tabs-wrap"><div style="padding:18px">
+    <div class="sec-head">Comparison Table</div>
+    <div style="overflow-x:auto">`;
+  if(isDNA){
+    html+=`<table class="data-table"><thead><tr><th>Name</th><th>Type</th><th>Length</th><th>GC%</th><th>Tm</th><th>MW kDa</th><th>ORFs</th><th>Restr.</th><th>Complexity</th></tr></thead><tbody>`;
+    r.forEach(x=>{html+=`<tr><td style="color:var(--amber);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(x.name)}</td><td><span class="badge bg">${x.type}</span></td><td style="color:var(--cyan)">${x.length.toLocaleString()}</td><td><span style="color:${x.gc<40||x.gc>60?'var(--red)':'var(--green)'}">${x.gc}%</span></td><td>${x.tm_nn}°C</td><td>${x.mw}</td><td style="color:var(--purple)">${x.orfs}</td><td>${x.restriction_count}</td><td>${x.entropy}%</td></tr>`;});
+    html+=`</tbody></table>`;
+  }else{
+    html+=`<table class="data-table"><thead><tr><th>Name</th><th>Length</th><th>MW kDa</th><th>pI</th><th>GRAVY</th><th>Instability</th></tr></thead><tbody>`;
+    r.forEach(x=>{html+=`<tr><td style="color:var(--amber)">${escHtml(x.name)}</td><td>${x.length}</td><td>${x.mw_kda}</td><td>${x.pi}</td><td style="color:${x.gravy>0?'var(--green)':'var(--red)'}">${x.gravy}</td><td style="color:${x.instability<40?'var(--green)':'var(--red)'}">${x.instability}</td></tr>`;});
+    html+=`</tbody></table>`;
+  }
+  html+=`</div><div class="export-bar"><button class="export-btn" onclick='exportBatchCSV(${JSON.stringify(r)})'>⬇ Export CSV</button></div></div></div>`;
+  container.innerHTML=html;
+}
+function exportBatchCSV(r){const keys=Object.keys(r[0]);dl([keys.join(','),...r.map(x=>keys.map(k=>x[k]??'').join(','))].join('\n'),'helix_batch.csv','text/csv');}
+
+// ── TOOL 3: ALIGNMENT ─────────────────────────
+function loadAlignSample(t){
+  if(t==='dna'){document.getElementById('alignSeq1').value='ATGGAGGAGCCGCAGTCAGATCCTAGCGTTGAATGCCAGGGG';document.getElementById('alignSeq2').value='ATGGAGGAGCAGCAGTCAGATCCCAGCGTTGAATGCCAGGGG';}
+  else{document.getElementById('alignSeq1').value='MTEYKLVVVGAGGVGKSALTIQLIQNHFVDEYDPT';document.getElementById('alignSeq2').value='MTEYKLVVVGAVGVGKSALTIQLIQNHFVSEYDPT';}
+}
+async function runAlign(){
+  const s1=document.getElementById('alignSeq1').value.trim(), s2=document.getElementById('alignSeq2').value.trim();
+  const method=document.getElementById('alignMethod').value;
+  if(!s1||!s2){showErr('alignErr','Enter both sequences');return;}
+  hideErr('alignErr');
+  const btn=document.getElementById('alignBtn'); btn.disabled=true; btn.textContent='Aligning…';
+  const el=document.getElementById('alignResults');
+  el.innerHTML='<div class="loading show"><div>Running alignment…</div><div class="load-bar"></div></div>';
+  try{
+    const res=await fetch('/align',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({seq1:s1,seq2:s2,method})});
+    const d=await res.json(); if(!res.ok)throw new Error(d.error);
+    renderAlign(d,el);
+  }catch(e){el.innerHTML='';showErr('alignErr',e.message);}
+  finally{btn.disabled=false; btn.textContent='⇌  Align Sequences';}
+}
+function renderAlign(d,container){
+  const ic=d.identity>=80?'vg':d.identity>=50?'va':'vr';
+  container.innerHTML=`
+    <div class="tile-grid" style="margin-bottom:14px">
+      <div class="stat-tile"><div class="tile-lbl">Identity</div><div class="tile-val ${ic}">${d.identity}%</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Score</div><div class="tile-val va">${d.score}</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Matches</div><div class="tile-val vg">${d.matches}</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Gaps</div><div class="tile-val vr">${d.gaps}</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Align Length</div><div class="tile-val vc">${d.alignment_len}</div></div>
+    </div>
+    <div class="tabs-wrap"><div style="padding:18px">
+      <div class="sec-head">${d.method} · ${d.seq_type}</div>
+      <div style="font-size:0.68rem;color:var(--text3);margin-bottom:10px;line-height:1.65">
+        Seq1: ${d.seq1_len} residues &nbsp;·&nbsp; Seq2: ${d.seq2_len} residues<br>
+        <span style="color:var(--cyan)">|</span> = identical match &nbsp; <span style="color:var(--text3)">.</span> = mismatch &nbsp; - = gap (insertion/deletion)
+      </div>
+      <div class="align-block"><span style="color:var(--green)">SEQ1  ${escHtml(d.seq1_aligned||'')}</span>
+<span style="color:var(--text3)">      ${escHtml(d.match_line||'')}</span>
+<span style="color:var(--amber)">SEQ2  ${escHtml(d.seq2_aligned||'')}</span></div>
+      <div style="margin-top:14px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:13px">
+        <div class="tile-lbl" style="margin-bottom:7px">Identity bar</div>
+        <div style="height:9px;background:var(--border);border-radius:5px;overflow:hidden">
+          <div style="height:100%;width:${d.identity}%;background:linear-gradient(90deg,${d.identity>=80?'var(--green)':d.identity>=50?'var(--amber)':'var(--red)'},var(--cyan));border-radius:5px;transition:width .7s ease"></div>
+        </div>
+        <div style="font-size:0.66rem;color:var(--text3);margin-top:6px">
+          ${d.identity>=95?'Near-identical — same gene/protein, possibly different alleles or strains':d.identity>=80?'High identity — closely related (e.g. same gene across species)':d.identity>=50?'Moderate — possibly homologous (shared ancestor)':'Low identity — may not be meaningfully related'}
+        </div>
+      </div>
+    </div></div>`;
+}
+
+// ── TOOL 4: ADVANCED PRIMERS ─────────────────
+function loadPrimerSample(){document.getElementById('primerInput').value='ATGGAGGAGCCGCAGTCAGATCCTAGCGTTGAATGCCAGGGGCACAAAACCGGAGGATCATGACCCCCTTCAGGCCCCAGCAGCAACAGCCAGACCTGTGTAATAGAAACTTACAATTTTACTGCATCACCAGTGGTCCAGAGCAATCTGAACCTTTGCC';}
+
+async function runPrimers(){
+  const seq=document.getElementById('primerInput').value.trim();
+  if(!seq){showErr('primersErr','Paste a DNA template first');return;}
+  hideErr('primersErr');
+  const btn=document.getElementById('primersBtn'); btn.disabled=true; btn.textContent='Designing…';
+  const el=document.getElementById('primersResults');
+  el.innerHTML='<div class="loading show"><div>Designing primer pairs…</div><div class="load-bar"></div><div class="load-sub">Testing lengths 18/20/22/24 bp · Checking hairpins, dimers, GC clamp…</div></div>';
+  try{
+    const res=await fetch('/primers_advanced',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sequence:seq})});
+    const d=await res.json(); if(!res.ok)throw new Error(d.error);
+    renderPrimers(d,el);
+  }catch(e){el.innerHTML='';showErr('primersErr',e.message);}
+  finally{btn.disabled=false; btn.textContent='⌖  Design Primer Pairs';}
+}
+
+function renderPrimers(d,container){
+  const qbadge=s=>s>=12?'<span class="badge bg">EXCELLENT</span>':s>=8?'<span class="badge bc">GOOD</span>':s>=4?'<span class="badge ba">FAIR</span>':'<span class="badge br">POOR</span>';
+  const chk=(bad,label)=>bad?`<span class="badge br">⚠ ${label}</span>`:`<span class="badge bg">✓ ${label}</span>`;
+  let html=`<div class="sec-head" style="margin-bottom:14px">Top ${d.count} Primer Pairs — ranked by quality score</div>`;
+  d.pairs.forEach((p,i)=>{
+    const f=p.forward, r=p.reverse;
+    html+=`<div class="pair-card ${i===0?'top':''}">
+      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:10px">
+        <span style="font-size:0.58rem;color:var(--text3);font-family:'IBM Plex Mono'">PAIR ${i+1}</span>
+        ${qbadge(p.total_score)} <span class="badge ba">Score: ${p.total_score}</span>
+        <span class="badge bc">Product: ${p.product_size} bp</span>
+        <span class="badge ${p.delta_tm<=2?'bg':'ba'}">ΔTm: ${p.delta_tm}°C</span>
+        ${chk(p.pair_dimer,'Heterodimer')}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+        <div><div class="tile-lbl" style="margin-bottom:4px">Forward · ${f.length} bp</div>
+          <div class="primer-seq">${escHtml(f.sequence||'')}</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">
+            <span class="badge bc">Tm ${f.tm}°C</span><span class="badge ba">GC ${f.gc}%</span>
+            ${chk(f.hairpin,'Hairpin')}${chk(f.self_dimer,'Self-dimer')}
+          </div>
+        </div>
+        <div><div class="tile-lbl" style="margin-bottom:4px">Reverse · ${r.length} bp</div>
+          <div class="primer-seq" style="color:var(--cyan)">${escHtml(r.sequence||'')}</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">
+            <span class="badge bc">Tm ${r.tm}°C</span><span class="badge ba">GC ${r.gc}%</span>
+            ${chk(r.hairpin,'Hairpin')}${chk(r.self_dimer,'Self-dimer')}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  });
+  html+=`<div class="export-bar"><button class="export-btn" onclick='exportPrimersCSV(${JSON.stringify(d.pairs)})'>⬇ Export CSV</button></div>`;
+  container.innerHTML=html;
+}
+function exportPrimersCSV(pairs){
+  const h='Pair,Fwd_seq,Fwd_tm,Fwd_gc,Fwd_hairpin,Rev_seq,Rev_tm,Rev_gc,Rev_hairpin,Product,DeltaTm,Score';
+  dl([h,...pairs.map((p,i)=>`${i+1},${p.forward.sequence},${p.forward.tm},${p.forward.gc},${p.forward.hairpin},${p.reverse.sequence},${p.reverse.tm},${p.reverse.gc},${p.reverse.hairpin},${p.product_size},${p.delta_tm},${p.total_score}`)].join('\n'),'primers.csv','text/csv');
+}
+
+// ── TOOL 5: BLAST ─────────────────────────
+let _blastRID = null;
+let _blastTimer = null;
+
+async function runBlast() {
+  const seq = document.getElementById('blastInput').value.trim();
+  const db  = document.getElementById('blastDb').value;
+  if (!seq) { showErr('blastErr','Paste a sequence first'); return; }
+  const clean = seq.replace(/[\s>][^\n]*/g,'').replace(/\s/g,'');
+  if (clean.length > 2000) { showErr('blastErr','Max 2000 bp for BLAST speed. Trim your sequence.'); return; }
+  hideErr('blastErr');
+  clearTimeout(_blastTimer);
+  _blastRID = null;
+
+  const btn = document.getElementById('blastBtn');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  const el = document.getElementById('blastResults');
+  el.innerHTML = blastWaiting('Submitting to NCBI BLAST…','Connecting to NCBI servers…', 0);
+
+  try {
+    const res = await fetch('/blast_submit', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({sequence:seq, database:db})
+    });
+    const d = await res.json();
+    if (!res.ok || d.error) throw new Error(d.error || 'Submission failed');
+    _blastRID = d.rid;
+    const waitSec = Math.max(d.wait || 20, 15);
+    btn.textContent = 'Waiting for NCBI…';
+    el.innerHTML = blastWaiting(
+      'BLAST job submitted! RID: ' + d.rid,
+      'Searching ' + db + ' against billions of sequences…',
+      waitSec
+    );
+    // Countdown then first poll
+    let cd = waitSec;
+    const cdTimer = setInterval(() => {
+      cd--;
+      const ce = document.querySelector('[data-countdown]');
+      if (ce) ce.textContent = 'First check in ' + Math.max(cd,0) + 's…';
+      if (cd <= 0) clearInterval(cdTimer);
+    }, 1000);
+    _blastTimer = setTimeout(() => { clearInterval(cdTimer); pollBlast(el, btn, 0); }, waitSec * 1000);
+  } catch(e) {
+    el.innerHTML = '';
+    showErr('blastErr', e.message);
+    btn.disabled = false; btn.textContent = '🔍  Submit to NCBI BLAST';
+  }
+}
+
+function blastWaiting(title, sub, wait) {
+  return '<div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:52px;text-align:center">' +
+    '<div style="font-size:1.8rem;margin-bottom:16px">🔍</div>' +
+    '<div style="font-size:0.9rem;font-weight:600;color:var(--text);margin-bottom:6px">' + title + '</div>' +
+    '<div class="load-bar" style="margin:16px auto"></div>' +
+    '<div style="font-size:0.66rem;color:var(--text3);font-family:\'IBM Plex Mono\',monospace;line-height:1.8">' + sub + '</div>' +
+    (wait > 0 ? '<div style="margin-top:10px;font-size:0.62rem;color:var(--amber);font-family:\'IBM Plex Mono\',monospace" data-countdown>First check in ' + wait + 's…</div>' : '') +
+    '</div>';
+}
+
+async function pollBlast(el, btn, attempt) {
+  if (!_blastRID) return;
+  if (attempt >= 40) {
+    el.innerHTML = '';
+    showErr('blastErr', 'BLAST timed out (~5 min). Try a shorter sequence (< 200 bp) or check blast.ncbi.nlm.nih.gov manually.');
+    btn.disabled = false; btn.textContent = '🔍  Submit to NCBI BLAST';
+    return;
+  }
+  const elapsed = attempt * 8;
+  el.innerHTML = blastWaiting(
+    'BLAST running — RID: ' + _blastRID,
+    'Searching NCBI… ' + elapsed + 's elapsed · poll ' + (attempt+1) + '/40', 0
+  );
+  try {
+    const res = await fetch('/blast_poll', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({rid: _blastRID})
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
+    if (d.status === 'WAITING' || d.status === 'UNKNOWN') {
+      _blastTimer = setTimeout(() => pollBlast(el, btn, attempt+1), 8000);
+      return;
+    }
+    if (d.status === 'FAILED') throw new Error(d.error || 'BLAST failed on NCBI servers');
+    if (d.status === 'DONE') {
+      renderBlast(d, el);
+      btn.disabled = false; btn.textContent = '🔍  Submit to NCBI BLAST';
+      return;
+    }
+    // Unexpected status — keep polling
+    _blastTimer = setTimeout(() => pollBlast(el, btn, attempt+1), 8000);
+  } catch(e) {
+    el.innerHTML = '';
+    showErr('blastErr', e.message);
+    btn.disabled = false; btn.textContent = '🔍  Submit to NCBI BLAST';
+  }
+}
+
+function renderBlast(d, container) {
+  const hits = d.hits || [];
+  if (!hits.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div>' +
+      '<div class="empty-title">No significant hits found</div>' +
+      '<div class="empty-sub">No database sequences match yours closely enough.<br>' +
+      'Try: a different database, longer sequence, or DNA→nt / Protein→nr.</div></div>';
+    return;
+  }
+  const best = hits[0];
+  const evCls = function(v) { var n=parseFloat(v)||1; return n<1e-50?'vg':n<1e-10?'va':'vr'; };
+  let html = '<div class="tile-grid" style="margin-bottom:14px">' +
+    '<div class="stat-tile"><div class="tile-lbl">Hits Found</div><div class="tile-val vg">' + hits.length + '</div></div>' +
+    '<div class="stat-tile"><div class="tile-lbl">Best Identity</div><div class="tile-val vc">' + best.identity + '<span style="font-size:0.78rem">%</span></div></div>' +
+    '<div class="stat-tile"><div class="tile-lbl">Best E-value</div><div class="tile-val ' + evCls(best.evalue) + '" style="font-size:0.9rem">' + best.evalue + '</div></div>' +
+    '<div class="stat-tile"><div class="tile-lbl">Coverage</div><div class="tile-val va">' + best.coverage + '<span style="font-size:0.78rem">%</span></div></div>' +
+    '</div>' +
+    '<div style="font-size:0.63rem;color:var(--text3);font-family:\'IBM Plex Mono\',monospace;margin-bottom:10px">' +
+    'Query: ' + (d.query_len||'?') + ' bp · ' + hits.length + ' hits · RID: ' + (_blastRID||'?') + '</div>';
+
+  hits.slice(0,20).forEach(function(h, i) {
+    var ev      = parseFloat(h.evalue) || 1;
+    var evBadge = (ev===0||h.evalue==='0.0') ? 'bg' : ev<1e-10 ? 'ba' : 'br';
+    var idCol   = h.identity>=95 ? 'var(--green)' : h.identity>=70 ? 'var(--amber)' : 'var(--red)';
+    var hasGene = h.gene_name && h.gene_name.length > 0;
+    html += '<div class="blast-card">' +
+      '<div style="display:flex;align-items:start;gap:9px;margin-bottom:7px">' +
+        '<div style="background:var(--panel2);border:1px solid var(--border);border-radius:5px;' +
+          'padding:5px 8px;font-size:0.66rem;font-weight:700;color:var(--text3);flex-shrink:0;' +
+          'font-family:\'IBM Plex Mono\'">#' + (i+1) + '</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:0.78rem;font-weight:500;color:var(--text);margin-bottom:5px;' +
+            'word-break:break-word;line-height:1.45">' + escHtml(h.title||'Unknown') + '</div>' +
+          '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">' +
+            '<span style="font-family:\'IBM Plex Mono\',monospace;font-size:0.57rem;color:var(--text3)">' + (h.accession||'') + '</span>' +
+            (h.organism ? '<span style="font-size:0.57rem;color:var(--text3);font-style:italic">' + escHtml(h.organism) + '</span>' : '') +
+            '<span class="badge ' + evBadge + '">E: ' + h.evalue + '</span>' +
+            '<span class="badge ba">Bit: ' + (h.bit_score||h.score) + '</span>' +
+            '<span class="badge bc">Cov: ' + h.coverage + '%</span>' +
+          '</div>' +
+          (hasGene ? '<button class="view-struct-btn" onclick="loadStructure(\'' + escHtml(h.gene_name) + '\', this)">🔬 View 3D Structure — ' + escHtml(h.gene_name) + '</button>' : '') +
+        '</div>' +
+        '<div style="text-align:right;flex-shrink:0">' +
+          '<div style="font-size:1.15rem;font-weight:800;color:' + idCol + '">' + h.identity + '%</div>' +
+          '<div style="font-size:0.5rem;color:var(--text3);font-family:\'IBM Plex Mono\'">IDENTITY</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="height:4px;background:var(--border);border-radius:3px;overflow:hidden">' +
+        '<div style="height:100%;width:' + h.identity + '%;background:linear-gradient(90deg,' + idCol + ',var(--cyan));' +
+          'border-radius:3px;transition:width .7s ease"></div>' +
+      '</div>' +
+      (h.qseq ? '<details style="margin-top:8px"><summary style="font-size:0.6rem;color:var(--text3);cursor:pointer;font-family:\'IBM Plex Mono\';user-select:none">▶ Show alignment</summary>' +
+        '<div style="margin-top:6px;background:#020810;border:1px solid var(--border);border-radius:6px;' +
+          'padding:9px;font-family:\'IBM Plex Mono\',monospace;font-size:0.62rem;overflow-x:auto;white-space:pre;line-height:2">' +
+          '<span style="color:var(--green)">Query  ' + escHtml(h.qseq) + '</span>\n' +
+          '<span style="color:var(--text3)">       ' + escHtml(h.midline||'') + '</span>\n' +
+          '<span style="color:var(--amber)">Sbjct  ' + escHtml(h.hseq||'') + '</span></div></details>' : '') +
+      '</div>';
+  });
+
+  html += '<div style="margin-top:10px;padding:11px 14px;background:rgba(240,180,41,0.04);' +
+    'border:1px solid rgba(240,180,41,0.12);border-radius:8px;font-size:0.66rem;color:var(--text2);line-height:1.8">' +
+    '💡 <b style="color:var(--amber)">Reading results:</b> ' +
+    'E-value = probability of a random match (0 = perfect). Identity% = exact base matches. ' +
+    'Coverage% = how much of your query aligned. ' +
+    'Click <b style="color:var(--purple)">🔬 View 3D Structure</b> on any hit with a gene name.' +
+    '</div><div id="structurePanel"></div>';
+
+  container.innerHTML = html;
+}
+
+// ── 3D STRUCTURE VIEWER ──────────────────────────────────────────────────────
+var _viewer    = null;
+var _currentGene  = null;
+var _structData   = null;
+var _spinning     = false;
+var _curStyle     = 'cartoon';
+var _curColor     = 'spectrum';
+var _curPdbUrl    = null;
+
+async function loadStructure(gene, triggerBtn) {
+  _currentGene = gene;
+  var panel = document.getElementById('structurePanel');
+  if (!panel) return;
+  panel.innerHTML =
+    '<div class="struct-wrap">' +
+      '<div class="struct-header">' +
+        '<div><div class="struct-title">🔬 Looking up ' + escHtml(gene) + '…</div>' +
+        '<div class="struct-sub">Querying UniProt · AlphaFold · RCSB PDB</div></div>' +
+      '</div>' +
+      '<div style="padding:36px;text-align:center">' +
+        '<div class="load-bar" style="margin:0 auto 12px"></div>' +
+        '<div style="font-size:0.7rem;color:var(--text3);font-family:\'IBM Plex Mono\'">Fetching structure data…</div>' +
+      '</div>' +
+    '</div>';
+  panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+  try {
+    var res = await fetch('/structure_search', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({gene: gene})
+    });
+    var d = await res.json();
+    if (d.error) throw new Error(d.error);
+    _structData = d;
+    renderStructurePanel(d, panel);
+  } catch(e) {
+    panel.innerHTML =
+      '<div class="struct-wrap"><div class="struct-err">' +
+      '⚠ Could not load structure for <b>' + escHtml(gene) + '</b>: ' + escHtml(e.message) + '<br>' +
+      '<span style="color:var(--text3)">The external APIs (UniProt/AlphaFold/PDB) may be unreachable, or no structure exists for this gene.</span>' +
+      '</div></div>';
+  }
+}
+
+function renderStructurePanel(d, panel) {
+  var hasAF   = !!d.alphafold_pdb_url;
+  var hasRCSB = d.rcsb_ids && d.rcsb_ids.length > 0;
+  if (!hasAF && !hasRCSB) {
+    panel.innerHTML =
+      '<div class="struct-wrap"><div class="struct-err">' +
+      'No 3D structure found for <b>' + escHtml(d.gene) + '</b>.<br>' +
+      '<span style="color:var(--text3)">' +
+      (d.uniprot_id ? 'UniProt: ' + d.uniprot_id + ' — but no AlphaFold or PDB structure available.' : 'Gene not found in UniProt (human).') +
+      '</span></div></div>';
+    return;
+  }
+  var rcsbBtns = (d.rcsb_ids||[]).map(function(id) {
+    return '<button class="struct-rcsb-btn" onclick="loadRCSB(\'' + id + '\')">' + id + ' — experimental PDB</button>';
+  }).join('');
+
+  panel.innerHTML =
+    '<div class="struct-wrap">' +
+      '<div class="struct-header">' +
+        '<div>' +
+          '<div class="struct-title">🔬 ' + escHtml(d.gene) +
+            (d.uniprot_name ? ' <span style="font-weight:400;font-size:0.72rem;color:var(--text2)">· ' + escHtml(d.uniprot_name) + '</span>' : '') +
+          '</div>' +
+          '<div class="struct-sub">' +
+            (d.uniprot_id ? 'UniProt: ' + d.uniprot_id + ' · ' : '') +
+            (hasAF ? 'AlphaFold structure available · ' : '') +
+            (hasRCSB ? d.rcsb_ids.length + ' experimental PDB structure(s)' : 'No experimental PDB') +
+          '</div>' +
+        '</div>' +
+        '<button onclick="document.getElementById(\'structurePanel\').innerHTML=\'\'" ' +
+          'style="background:none;border:1px solid var(--border);color:var(--text3);padding:5px 10px;' +
+          'border-radius:6px;cursor:pointer;font-size:0.72rem">✕ Close</button>' +
+      '</div>' +
+      '<div class="struct-body">' +
+        '<div class="struct-viewer" id="molViewerContainer">' +
+          '<div class="struct-loading" id="structLoadOverlay">' +
+            '<div style="font-size:0.75rem;color:var(--text2);font-family:\'IBM Plex Mono\'">Loading structure…</div>' +
+            '<div class="load-bar"></div>' +
+            '<div style="font-size:0.62rem;color:var(--text3);font-family:\'IBM Plex Mono\'" id="structLoadMsg">Downloading PDB file…</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="struct-controls">' +
+          (d.function ? '<div class="struct-func"><b style="color:var(--amber);display:block;margin-bottom:4px">Function:</b>' + escHtml(d.function) + '</div>' : '') +
+          '<div class="struct-control-group">' +
+            '<label>Source</label>' +
+            '<div class="struct-source-tabs">' +
+              '<div class="struct-source-tab ' + (hasAF?'active':'') + '" id="srcTabAF" onclick="switchSource(\'alphafold\')">AlphaFold AI</div>' +
+              '<div class="struct-source-tab ' + (!hasAF&&hasRCSB?'active':'') + '" id="srcTabRCSB" onclick="switchSource(\'rcsb\')">PDB Exp.</div>' +
+            '</div>' +
+            (hasRCSB ? '<div class="struct-rcsb-list" id="rcsbList" style="display:' + (hasAF?'none':'flex') + '">' + rcsbBtns + '</div>' : '') +
+          '</div>' +
+          '<div class="struct-control-group">' +
+            '<label>Render style</label>' +
+            '<button class="struct-btn active" id="styleCartoon" onclick="setStyle(\'cartoon\')">🎗 Cartoon (secondary structure)</button>' +
+            '<button class="struct-btn" id="styleSurface" onclick="setStyle(\'surface\')">🔵 Molecular surface</button>' +
+            '<button class="struct-btn" id="styleSphere" onclick="setStyle(\'sphere\')">⚪ Space-fill spheres</button>' +
+            '<button class="struct-btn" id="styleStick" onclick="setStyle(\'stick\')">🔗 Sticks (bonds)</button>' +
+            '<button class="struct-btn" id="styleLine" onclick="setStyle(\'line\')">〰 Wireframe</button>' +
+          '</div>' +
+          '<div class="struct-control-group">' +
+            '<label>Color scheme</label>' +
+            '<button class="struct-btn active" id="colorSpectrum" onclick="setColor(\'spectrum\')">🌈 Rainbow (N→C terminus)</button>' +
+            '<button class="struct-btn" id="colorChain" onclick="setColor(\'chain\')">🔷 By chain</button>' +
+            '<button class="struct-btn" id="colorResidue" onclick="setColor(\'residue\')">🧪 By residue type</button>' +
+            '<button class="struct-btn" id="colorSecStr" onclick="setColor(\'ssJmol\')">🎗 By secondary structure</button>' +
+            '<button class="struct-btn" id="colorBfactor" onclick="setColor(\'confidence\')">💙 pLDDT confidence (AF only)</button>' +
+          '</div>' +
+          '<div class="struct-control-group">' +
+            '<label>View controls</label>' +
+            '<button class="struct-btn" onclick="if(_viewer){_viewer.zoomTo();_viewer.render()}">⊙ Reset / re-center</button>' +
+            '<button class="struct-btn" onclick="toggleSpin()" id="spinBtn">▶ Start spinning</button>' +
+            '<button class="struct-btn amber" onclick="downloadPDB()">⬇ Download PDB file</button>' +
+          '</div>' +
+          '<div style="font-size:0.6rem;color:var(--text3);font-family:\'IBM Plex Mono\';line-height:1.8;' +
+            'padding:8px;background:rgba(255,255,255,0.02);border-radius:5px">' +
+            '🖱 Left drag = rotate<br>' +
+            '🖱 Right drag / scroll = zoom<br>' +
+            '🖱 Middle drag = pan<br>' +
+            '<span style="color:var(--cyan)">Blue = high pLDDT confidence (&gt;90)</span><br>' +
+            '<span style="color:var(--amber)">Yellow = medium (70–90)</span><br>' +
+            '<span style="color:var(--red)">Orange/red = low (&lt;70)</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  // Auto-load best available structure
+  if (hasAF) {
+    load3DmolPDB(d.alphafold_pdb_url, 'alphafold');
+  } else if (hasRCSB) {
+    loadRCSB(d.rcsb_ids[0]);
+  }
+  // Inject Ramachandran panel
+  var structWrap = panel.querySelector('.struct-wrap');
+  if (structWrap && !panel.querySelector('#ramaPanel')) {
+    var ramaDiv = document.createElement('div');
+    ramaDiv.id = 'ramaPanel'; ramaDiv.className = 'rama-wrap';
+    ramaDiv.innerHTML = '<div class="rama-title">\u{1F4D0} Ramachandran Plot</div>' +
+      '<div style="font-size:0.65rem;color:var(--text3);font-family:IBM Plex Mono">Loads when structure renders...</div>';
+    structWrap.appendChild(ramaDiv);
+  }
+}
+
+function load3DmolPDB(url, source) {
+  _curPdbUrl = url;
+  var container = document.getElementById('molViewerContainer');
+  if (!container) return;
+  if (_viewer) { try { _viewer.clear(); } catch(e) {} _viewer = null; }
+  var overlay = document.getElementById('structLoadOverlay');
+  var msgEl   = document.getElementById('structLoadMsg');
+  if (overlay) overlay.style.display = 'flex';
+  if (msgEl) msgEl.textContent = 'Downloading ' + (source==='alphafold'?'AlphaFold':'PDB') + ' structure…';
+  _viewer = $3Dmol.createViewer(container, {backgroundColor:'#020810'});
+  // Use fetch instead of jQuery.ajax - 3Dmol bundles jQuery internally but doesn't expose it globally
+  fetch(url)
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+    .then(function(data) {
+      _viewer.addModel(data, 'pdb');
+      applyCurrentStyle();
+      _viewer.zoomTo();
+      _viewer.render();
+      if (overlay) overlay.style.display = 'none';
+      // Auto-load Ramachandran after structure loads
+      if (_curPdbUrl) loadRamachandran(_curPdbUrl);
+    })
+    .catch(function(err) {
+      if (overlay) overlay.style.display = 'none';
+      if (msgEl) { msgEl.style.color='var(--red)'; msgEl.textContent='Failed: '+err.message; }
+    });
+}
+
+function loadRCSB(pdbId) {
+  _curPdbUrl = 'https://files.rcsb.org/download/' + pdbId + '.pdb';
+  if (_viewer) { try { _viewer.clear(); } catch(e) {} _viewer = null; }
+  var container = document.getElementById('molViewerContainer');
+  if (!container) return;
+  var overlay = document.getElementById('structLoadOverlay');
+  var msgEl   = document.getElementById('structLoadMsg');
+  if (overlay) overlay.style.display = 'flex';
+  if (msgEl) msgEl.textContent = 'Loading experimental structure ' + pdbId + ' from RCSB PDB…';
+  _viewer = $3Dmol.createViewer(container, {backgroundColor:'#020810'});
+  $3Dmol.download('pdb:' + pdbId, _viewer, {}, function() {
+    applyCurrentStyle();
+    _viewer.zoomTo();
+    _viewer.render();
+    if (overlay) overlay.style.display = 'none';
+  });
+  document.querySelectorAll('.struct-rcsb-btn').forEach(function(b) {
+    b.style.background = b.textContent.trim().startsWith(pdbId) ? 'rgba(192,132,252,0.22)' : '';
+    b.style.borderColor= b.textContent.trim().startsWith(pdbId) ? 'var(--purple)' : '';
+  });
+  setTimeout(function(){ loadRamachandran('https://files.rcsb.org/download/' + pdbId + '.pdb'); }, 2500);
+}
+
+function switchSource(src) {
+  var afTab   = document.getElementById('srcTabAF');
+  var rcsbTab = document.getElementById('srcTabRCSB');
+  var rcsbList= document.getElementById('rcsbList');
+  if (src === 'alphafold') {
+    if (afTab)   afTab.classList.add('active');
+    if (rcsbTab) rcsbTab.classList.remove('active');
+    if (rcsbList) rcsbList.style.display = 'none';
+    if (_structData && _structData.alphafold_pdb_url) load3DmolPDB(_structData.alphafold_pdb_url, 'alphafold');
+  } else {
+    if (afTab)   afTab.classList.remove('active');
+    if (rcsbTab) rcsbTab.classList.add('active');
+    if (rcsbList) rcsbList.style.display = 'flex';
+    if (_structData && _structData.rcsb_ids && _structData.rcsb_ids[0]) loadRCSB(_structData.rcsb_ids[0]);
+  }
+}
+
+function applyCurrentStyle() {
+  if (!_viewer) return;
+  try { _viewer.removeAllSurfaces(); } catch(e) {}
+  _viewer.setStyle({}, {});
+  var colorscheme = getColorScheme(_curColor);
+  if (_curStyle === 'cartoon')  _viewer.setStyle({}, {cartoon: colorscheme});
+  else if (_curStyle === 'surface') { _viewer.setStyle({},{}); _viewer.addSurface($3Dmol.SurfaceType.VDW, Object.assign({opacity:0.85}, colorscheme)); }
+  else if (_curStyle === 'sphere') _viewer.setStyle({}, {sphere: Object.assign({scale:0.35}, colorscheme)});
+  else if (_curStyle === 'stick')  _viewer.setStyle({}, {stick: Object.assign({radius:0.12}, colorscheme)});
+  else if (_curStyle === 'line')   _viewer.setStyle({}, {line: colorscheme});
+  _viewer.render();
+}
+
+function getColorScheme(color) {
+  if (color === 'spectrum')   return {colorscheme:'spectrum'};
+  if (color === 'chain')      return {colorscheme:'chainHetatm'};
+  if (color === 'residue')    return {colorscheme:'amino'};
+  if (color === 'ssJmol')     return {colorscheme:'ssJmol'};
+  if (color === 'confidence') return {colorscheme:{prop:'b', gradient:'roygbiv', min:0, max:100}};
+  return {colorscheme:'spectrum'};
+}
+
+function setStyle(style) {
+  _curStyle = style;
+  document.querySelectorAll('[id^="style"]').forEach(function(b){b.classList.remove('active');});
+  var names = {cartoon:'Cartoon',surface:'Surface',sphere:'Sphere',stick:'Stick',line:'Line'};
+  var btn = document.getElementById('style' + (names[style]||style));
+  if (btn) btn.classList.add('active');
+  applyCurrentStyle();
+}
+
+function setColor(color) {
+  _curColor = color;
+  document.querySelectorAll('[id^="color"]').forEach(function(b){b.classList.remove('active');});
+  var map = {spectrum:'colorSpectrum',chain:'colorChain',residue:'colorResidue',ssJmol:'colorSecStr',confidence:'colorBfactor'};
+  var btn = document.getElementById(map[color]);
+  if (btn) btn.classList.add('active');
+  applyCurrentStyle();
+}
+
+function toggleSpin() {
+  if (!_viewer) return;
+  _spinning = !_spinning;
+  var btn = document.getElementById('spinBtn');
+  if (_spinning) { _viewer.spin('y', 1); if (btn) btn.textContent = '⏹ Stop spinning'; }
+  else           { _viewer.spin(false); if (btn) btn.textContent = '▶ Start spinning'; }
+}
+
+function downloadPDB() {
+  if (!_curPdbUrl) return;
+  var a = document.createElement('a');
+  a.href = _curPdbUrl;
+  a.target = '_blank';
+  a.download = (_currentGene||'structure') + '.pdb';
+  a.click();
+}
+
+// ── RAMACHANDRAN PLOT ─────────────────────────────────────────────────────────
+async function loadRamachandran(pdbUrl) {
+  var panel = document.getElementById('ramaPanel');
+  if (!panel) return;
+  panel.innerHTML = '<div style="padding:12px;font-size:0.65rem;color:var(--text3);font-family:\'IBM Plex Mono\',monospace">' +
+    '<div class="load-bar" style="margin-bottom:8px"></div>Calculating φ/ψ angles…</div>';
+  try {
+    var res = await fetch('/ramachandran', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({pdb_url: pdbUrl})
+    });
+    var d = await res.json();
+    if (d.error) throw new Error(d.error);
+    renderRamachandran(d.points, panel);
+  } catch(e) {
+    panel.innerHTML = '<div style="padding:10px 0;font-size:0.62rem;color:var(--red);font-family:\'IBM Plex Mono\',monospace">φ/ψ calc failed: ' + escHtml(e.message) + '</div>';
+  }
+}
+
+function renderRamachandran(points, panel) {
+  if (!points || !points.length) {
+    panel.innerHTML = '<div style="padding:10px;font-size:0.62rem;color:var(--text3)">No backbone atoms found.</div>';
+    return;
+  }
+  var W = 320, H = 320, M = 36;
+  var plotW = W - M*2, plotH = H - M*2;
+
+  // Count secondary structure regions (approx)
+  var helix=0, sheet=0, other=0;
+  points.forEach(function(p) {
+    var phi=p.phi, psi=p.psi;
+    if (phi>=-160&&phi<=-40&&psi>=-70&&psi<=-10) helix++;
+    else if ((phi>=-170&&phi<=-50)&&(psi>=80&&psi<=180||psi>=-180&&psi<=-150)) sheet++;
+    else other++;
+  });
+
+  // SVG Ramachandran plot
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:360px;display:block;margin:0 auto">';
+
+  // Background
+  svg += '<rect width="'+W+'" height="'+H+'" fill="#020810"/>';
+
+  // Allowed regions (approximate, shaded)
+  function toX(phi){ return M + (phi+180)/360*plotW; }
+  function toY(psi){ return M + (180-psi)/360*plotH; }
+
+  // Alpha-helix region
+  // Alpha-helix favored: phi -160 to -40, psi -70 to -10
+  svg += '<rect x="'+toX(-160).toFixed(1)+'" y="'+toY(-10).toFixed(1)+'"'
+       + ' width="'+((120/360)*plotW).toFixed(1)+'"'
+       + ' height="'+((60/360)*plotH).toFixed(1)+'"'
+       + ' fill="rgba(34,211,238,0.10)" rx="4"/>';
+  // Alpha-helix allowed: phi -160 to -40, psi -70 to 50 (broader)
+  svg += '<rect x="'+toX(-160).toFixed(1)+'" y="'+toY(50).toFixed(1)+'"'
+       + ' width="'+((120/360)*plotW).toFixed(1)+'"'
+       + ' height="'+((120/360)*plotH).toFixed(1)+'"'
+       + ' fill="rgba(34,211,238,0.04)" rx="4"/>';
+  // Beta-sheet region
+  svg += '<rect x="'+toX(-170)+'" y="'+toY(180)+'" width="'+((120/360)*plotW)+'" height="'+((60/360)*plotH)+'" fill="rgba(52,211,153,0.08)" rx="4"/>';
+  svg += '<rect x="'+toX(-170)+'" y="'+toY(-150)+'" width="'+((120/360)*plotW)+'" height="'+((70/360)*plotH)+'" fill="rgba(52,211,153,0.08)" rx="4"/>';
+
+  // Grid lines
+  for (var v=-180;v<=180;v+=60) {
+    var x=toX(v), y=toY(v);
+    svg += '<line x1="'+x+'" y1="'+M+'" x2="'+x+'" y2="'+(M+plotH)+'" stroke="#1a2a38" stroke-width="0.8"/>';
+    svg += '<line x1="'+M+'" y1="'+y+'" x2="'+(M+plotW)+'" y2="'+y+'" stroke="#1a2a38" stroke-width="0.8"/>';
+  }
+  // Axes
+  svg += '<line x1="'+toX(0)+'" y1="'+M+'" x2="'+toX(0)+'" y2="'+(M+plotH)+'" stroke="#2a3a4a" stroke-width="1"/>';
+  svg += '<line x1="'+M+'" y1="'+toY(0)+'" x2="'+(M+plotW)+'" y2="'+toY(0)+'" stroke="#2a3a4a" stroke-width="1"/>';
+
+  // Region labels
+  svg += '<text x="'+toX(-100).toFixed(1)+'" y="'+toY(-35).toFixed(1)+'" fill="rgba(34,211,238,0.7)" font-size="8" font-family="monospace" text-anchor="middle">α-helix</text>';
+  svg += '<text x="'+toX(-100).toFixed(1)+'" y="'+toY(140).toFixed(1)+'" fill="rgba(52,211,153,0.7)" font-size="8" font-family="monospace" text-anchor="middle">β-sheet</text>';
+
+  // Data points
+  var COLORS = {
+    'G':'#f59e0b','P':'#a78bfa','A':'#34d399',
+    'default_helix':'#22d3ee','default_sheet':'#34d399','default_other':'rgba(240,180,41,0.6)'
+  };
+  points.forEach(function(p) {
+    var x = toX(p.phi), y = toY(p.psi);
+    var col;
+    if (p.aa==='G') col='#f59e0b';
+    else if (p.aa==='P') col='#a78bfa';
+    else {
+      var phi=p.phi, psi=p.psi;
+      if (phi>=-160&&phi<=-40&&psi>=-70&&psi<=-10) col='rgba(34,211,238,0.85)';
+      else if ((phi>=-170&&phi<=-50)&&(psi>=90||psi<=-130)) col='rgba(52,211,153,0.85)';
+      else col='rgba(248,113,113,0.65)';
+    }
+    svg += '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="2.2" fill="'+col+'" opacity="0.85"/>';
+  });
+
+  // Border
+  svg += '<rect x="'+M+'" y="'+M+'" width="'+plotW+'" height="'+plotH+'" fill="none" stroke="#2a3a4a" stroke-width="1"/>';
+
+  // Axis labels
+  svg += '<text x="'+(W/2)+'" y="'+(H-4)+'" fill="#4a6a8a" font-size="9" font-family="monospace" text-anchor="middle">φ (phi)</text>';
+  svg += '<text x="10" y="'+(H/2)+'" fill="#4a6a8a" font-size="9" font-family="monospace" text-anchor="middle" transform="rotate(-90,10,'+(H/2)+')">ψ (psi)</text>';
+
+  // Tick labels
+  [-180,-120,-60,0,60,120,180].forEach(function(v){
+    svg += '<text x="'+toX(v)+'" y="'+(M-4)+'" fill="#3a5a7a" font-size="7" font-family="monospace" text-anchor="middle">'+v+'</text>';
+    svg += '<text x="'+(M-4)+'" y="'+(toY(v)+3)+'" fill="#3a5a7a" font-size="7" font-family="monospace" text-anchor="end">'+v+'</text>';
+  });
+
+  svg += '</svg>';
+
+  var total = points.length;
+  panel.innerHTML =
+    '<div class="rama-title">📐 Ramachandran Plot — '+total+' residues</div>' +
+    svg +
+    '<div class="rama-legend" style="margin-top:8px;font-size:0.58rem;color:var(--text3);font-family:\'IBM Plex Mono\',monospace;display:flex;flex-wrap:wrap;gap:8px">' +
+      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#22d3ee"/></svg> α-helix ('+helix+', '+Math.round(helix/total*100)+'%)</span>' +
+      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#34d399"/></svg> β-sheet ('+sheet+', '+Math.round(sheet/total*100)+'%)</span>' +
+      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#f87171"/></svg> Other ('+other+', '+Math.round(other/total*100)+'%)</span>' +
+      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#f59e0b"/></svg> Gly (G)</span>' +
+      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#a78bfa"/></svg> Pro (P)</span>' +
+    '</div>';
+}
+
+// ── PHYLOGENETIC TREE ─────────────────────────────────────────────────────────
+var _PHYLO_SAMPLES = {
+  tp53: '>Human_TP53\nMEEPQSDPSVEPPLSQETFSDLWKLLPENNVLSPLPSQAMDDLMLSPDDIEQWFTEDP\n>Chimp_TP53\nMEEPQSDPSVEPPLSQETFSDLWKLLPENNVLSPLPSQAMDDLMLSPDDIEQWFTEDP\n>Mouse_TP53\nMEEPQSDPSVEPPLSQETFSDLWKLLPPNNVLSSLPSQAMDDLMLSPDDIEQWFTEDP\n>Rat_TP53\nMEEPQSDPSIEPPLSQETFSDLWKLLPPNNVLSSLPSQAMDDLMLSPDDIEQWFTEDP\n>Zebrafish_TP53\nMEEPQSELIEPPLHQETFAELWNLLPDDDLANLPASAAMDDFHSPEEIEQWFTQDP',
+  cytb: '>Human_CytB\nATHPLAKIVNNSFIDLPAPSNISAWWNFGSLLGACLILQITTGLFLAMHYSPDTSTAFSS\n>Chimp_CytB\nATHPLAKIVNNSFIDLPAPSNISAWWNFGSLLGACLILQITTGLFLAMHYSADTSTAFST\n>Gorilla_CytB\nATHPLAKIVNNSFIDLPAPSNISAWWNFGSLLGACLILQITTGLFLAMHYSPDTSTAFSA\n>Mouse_CytB\nATHPLARIVNSSFVDLPTPSNISAWWNFGSLLGACLIIQITTGLFLAMHYTPDTSTAFSS\n>Chicken_CytB\nATHPLARIINNSYIDLPAPSNLSAWWNFGSLLGACLIIQITTGIFLAMHYTPNASTAFNS'
+};
+
+function loadPhyloSample(name) {
+  var s = _PHYLO_SAMPLES[name];
+  if (s) document.getElementById('phyloInput').value = s;
+}
+
+async function runPhylo() {
+  var fasta = document.getElementById('phyloInput').value.trim();
+  if (!fasta) { showErr('phyloErr','Paste FASTA sequences first'); return; }
+  hideErr('phyloErr');
+  var btn = document.getElementById('phyloBtn');
+  btn.disabled = true; btn.textContent = 'Building tree…';
+  var el = document.getElementById('phyloResults');
+  el.innerHTML = '<div style="padding:48px;text-align:center"><div class="load-bar" style="margin:0 auto 12px"></div>' +
+    '<div style="font-size:0.7rem;color:var(--text3);font-family:\'IBM Plex Mono\'">Running UPGMA clustering…</div></div>';
+  try {
+    var res = await fetch('/phylo_tree', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({fasta: fasta})
+    });
+    var d = await res.json();
+    if (d.error) throw new Error(d.error);
+    renderPhyloTree(d, el);
+  } catch(e) {
+    el.innerHTML = '';
+    showErr('phyloErr', e.message);
+  }
+  btn.disabled = false; btn.textContent = '🌿  Build Tree (UPGMA)';
+}
+
+function renderPhyloTree(d, container) {
+  var names  = d.names;
+  var dm     = d.distance_matrix;
+  var steps  = d.steps;
+  var newick = d.newick;
+  var n      = names.length;
+
+  // ── 1. Leaf ordering via group reconstruction ─────────────────────────────
+  var groups = {};
+  names.forEach(function(nm){ groups[nm] = [nm]; });
+  steps.forEach(function(s, idx) {
+    var key = 'Node' + (n + idx);
+    groups[key] = (groups[s.a] || [s.a]).concat(groups[s.b] || [s.b]);
+  });
+  var rootKey = 'Node' + (n + steps.length - 1);
+  var order = groups[rootKey] || names.slice();
+
+  // ── 2. Short display name (strip long accession prefixes) ─────────────────
+  function shortName(nm) {
+    var s = nm.replace(/^[A-Z_]{1,4}[_\d]+[\.:][^\s]+\s+/, '').trim();
+    if (!s || s.length < 4) s = nm;
+    return s.length > 26 ? s.slice(0, 24) + '…' : s;
+  }
+
+  // ── 3. Depth-based cladogram layout ───────────────────────────────────────
+  // depth[node] = max number of leaves below it (leaves=1, root=n)
+  // This guarantees every branch is visible regardless of actual distance=0.
+  var nodeDepth = {};
+  names.forEach(function(nm){ nodeDepth[nm] = 1; });
+  steps.forEach(function(s, idx) {
+    var key = 'Node' + (n + idx);
+    nodeDepth[key] = Math.max(nodeDepth[s.a] || 1, nodeDepth[s.b] || 1) + 1;
+  });
+  var maxDepth = nodeDepth[rootKey] || n;
+
+  // ── 4. Layout constants ────────────────────────────────────────────────────
+  var LABEL_W = 0, RM = 160, TM = 44, BM = 24;
+  var ROW_H   = Math.max(28, Math.min(48, 540 / n));
+  var SVG_H   = TM + BM + n * ROW_H;
+  var SVG_W   = 880;
+  var PLOT_W  = SVG_W - LABEL_W - RM;
+
+  // Convert depth to x: root (deepest) → leftmost, leaves → rightmost
+  function depthToX(depth) {
+    return LABEL_W + PLOT_W * (1 - (depth - 1) / (maxDepth - 1));
+  }
+
+  // ── 5. Assign positions ────────────────────────────────────────────────────
+  var pos = {};
+  order.forEach(function(nm, i) {
+    pos[nm] = { x: LABEL_W + PLOT_W, y: TM + (i + 0.5) * ROW_H };
+  });
+  steps.forEach(function(s, idx) {
+    var key = 'Node' + (n + idx);
+    var pa  = pos[s.a] || { x: LABEL_W, y: TM };
+    var pb  = pos[s.b] || { x: LABEL_W, y: TM };
+    pos[key] = {
+      x: depthToX(nodeDepth[key]),
+      y: (pa.y + pb.y) / 2
+    };
+  });
+
+  // ── 6. Draw branches ───────────────────────────────────────────────────────
+  var LEAF_COLORS = ['#22d3ee','#34d399','#f0b429','#a78bfa','#f87171',
+                     '#fb923c','#38bdf8','#4ade80','#e879f9','#facc15'];
+  // Assign a color to each leaf
+  var leafColor = {};
+  order.forEach(function(nm, i){ leafColor[nm] = LEAF_COLORS[i % LEAF_COLORS.length]; });
+  // Propagate colors up: each internal node inherits the color of its first leaf descendant
+  var nodeColor = {};
+  steps.forEach(function(s, idx) {
+    var key = 'Node' + (n + idx);
+    nodeColor[key] = nodeColor[s.a] || leafColor[s.a] || '#22d3ee';
+  });
+  function getColor(label) { return leafColor[label] || nodeColor[label] || '#22d3ee'; }
+
+  var paths = '';
+  var maxH = steps.length ? Math.max(steps[steps.length-1].height, 1e-9) : 1;
+
+  steps.forEach(function(s, idx) {
+    var key = 'Node' + (n + idx);
+    var pm  = pos[key];
+    var pa  = pos[s.a] || {x: LABEL_W, y: pm.y};
+    var pb  = pos[s.b] || {x: LABEL_W, y: pm.y};
+    var isRoot = idx === steps.length - 1;
+    var col  = isRoot ? '#f0b429' : '#22d3ee';
+    var lw   = isRoot ? '2' : '1.8';
+
+    // Vertical connector
+    paths += '<line x1="'+pm.x.toFixed(1)+'" y1="'+pa.y.toFixed(1)+'" x2="'+pm.x.toFixed(1)+'" y2="'+pb.y.toFixed(1)+
+      '" stroke="'+col+'" stroke-width="'+lw+'" opacity="0.85"/>';
+    // Horizontal arm → child A
+    paths += '<line x1="'+pm.x.toFixed(1)+'" y1="'+pa.y.toFixed(1)+'" x2="'+pa.x.toFixed(1)+'" y2="'+pa.y.toFixed(1)+
+      '" stroke="'+getColor(s.a)+'" stroke-width="'+lw+'" opacity="0.9"/>';
+    // Horizontal arm → child B
+    paths += '<line x1="'+pm.x.toFixed(1)+'" y1="'+pb.y.toFixed(1)+'" x2="'+pb.x.toFixed(1)+'" y2="'+pb.y.toFixed(1)+
+      '" stroke="'+getColor(s.b)+'" stroke-width="'+lw+'" opacity="0.9"/>';
+    // Distance label on branch midpoint
+    var dist = s.dist > 0 ? s.dist.toFixed(4) : '0';
+    var midX = ((pm.x + pa.x) / 2).toFixed(1);
+    var midX2 = ((pm.x + pb.x) / 2).toFixed(1);
+    paths += '<text x="'+midX+'" y="'+(pa.y - 3).toFixed(1)+'" fill="#3a6a8a" font-size="7" font-family="monospace" text-anchor="middle">'+dist+'</text>';
+    // Internal node dot
+    paths += '<circle cx="'+pm.x.toFixed(1)+'" cy="'+pm.y.toFixed(1)+'" r="3.5" fill="'+col+'" opacity="0.95" stroke="#020810" stroke-width="0.8"/>';
+  });
+
+  // Leaf tick marks
+  var labelsSvg = '';
+  order.forEach(function(nm, i) {
+    var p   = pos[nm];
+    var col = leafColor[nm];
+    labelsSvg += '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="3" fill="'+col+'" stroke="#020810" stroke-width="1"/>';
+    labelsSvg += '<text x="'+(p.x+10)+'" y="'+(p.y+4).toFixed(1)+
+      '" fill="'+col+'" font-size="12" font-weight="500" font-family="\'IBM Plex Mono\',monospace" text-anchor="start">'+
+      '<title>'+escHtml(nm)+'</title>'+escHtml(shortName(nm))+'</text>';
+  });
+
+  // Distance scale axis (real p-distances, not depth)
+  var axis = '';
+  var ATICKS = 5;
+  for (var t = 0; t <= ATICKS; t++) {
+    var frac = t / ATICKS;
+    var realDist = (frac * maxH).toFixed(3);
+    // Map real distance to approximate x position (for reference only)
+    var ax = LABEL_W + PLOT_W * (1 - frac);
+    axis += '<line x1="'+ax.toFixed(1)+'" y1="'+(TM-6)+'" x2="'+ax.toFixed(1)+'" y2="'+(TM)+
+      '" stroke="#2a3a4a" stroke-width="1"/>';
+    axis += '<line x1="'+ax.toFixed(1)+'" y1="'+TM+'" x2="'+ax.toFixed(1)+'" y2="'+(SVG_H-BM)+
+      '" stroke="rgba(26,42,56,0.5)" stroke-width="0.5" stroke-dasharray="3,4"/>';
+    axis += '<text x="'+ax.toFixed(1)+'" y="'+(TM-10)+'" fill="#4a6a8a" font-size="8" font-family="monospace" text-anchor="middle">'+realDist+'</text>';
+  }
+  axis += '<text x="'+(LABEL_W+PLOT_W*0.5)+'" y="'+(TM-22)+'" fill="#3a5a7a" font-size="9" font-family="monospace" text-anchor="middle">← more similar  ·  p-distance  ·  more divergent →</text>';
+  axis += '<rect x="'+LABEL_W+'" y="'+TM+'" width="'+PLOT_W+'" height="'+(SVG_H-TM-BM)+'" fill="none" stroke="#1a2a38" stroke-width="1"/>';
+
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+SVG_W+' '+SVG_H+
+    '" style="width:100%;display:block;background:#020810;border-radius:8px">'+
+    '<rect width="'+SVG_W+'" height="'+SVG_H+'" fill="#020810"/>'+
+    axis + paths + labelsSvg +
+    '<text x="10" y="'+(SVG_H-6)+'" fill="#1e3a5a" font-size="8" font-family="monospace">Layout: cladogram (branch lengths proportional to actual p-distance annotations)</text>'+
+    '</svg>';
+
+  // ── 7. Distance matrix ─────────────────────────────────────────────────────
+  var SHORT = names.map(shortName);
+  var dmHtml = '<div class="phylo-dm"><div style="font-size:0.62rem;color:var(--amber);font-family:\'IBM Plex Mono\',monospace;margin-bottom:6px">Distance Matrix (p-distance)</div><table><tr><th></th>';
+  SHORT.forEach(function(nm, i){ dmHtml += '<th title="'+escHtml(names[i])+'">'+escHtml(nm)+'</th>'; });
+  dmHtml += '</tr>';
+  names.forEach(function(nm, i){
+    dmHtml += '<tr><th style="text-align:left;color:var(--text2)" title="'+escHtml(nm)+'">'+escHtml(SHORT[i])+'</th>';
+    names.forEach(function(_, j){
+      var v = dm[i][j];
+      var cls = v===0?'zero':v<0.1?'low':v<0.3?'mid':'high';
+      dmHtml += '<td class="'+cls+'">'+(v===0?'—':v.toFixed(3))+'</td>';
+    });
+    dmHtml += '</tr>';
+  });
+  dmHtml += '</table></div>';
+
+  // ── 8. Merge steps ─────────────────────────────────────────────────────────
+  var stepsHtml = '<div style="padding:12px 18px;border-top:1px solid var(--border)">' +
+    '<div style="font-size:0.62rem;color:var(--amber);font-family:\'IBM Plex Mono\',monospace;margin-bottom:6px">UPGMA Merge Steps</div>';
+  steps.forEach(function(s, i){
+    stepsHtml +=
+      '<div style="font-size:0.62rem;font-family:\'IBM Plex Mono\',monospace;color:var(--text2);padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);display:flex;justify-content:space-between">'+
+      '<span><span style="color:var(--text3)">Step '+(i+1)+'  </span>'+
+      '<span style="color:#22d3ee" title="'+escHtml(s.a)+'">'+escHtml(shortName(s.a))+'</span>'+
+      '<span style="color:var(--text3)"> ＋ </span>'+
+      '<span style="color:#34d399" title="'+escHtml(s.b)+'">'+escHtml(shortName(s.b))+'</span></span>'+
+      '<span style="color:var(--text3)">d = '+s.dist.toFixed(4)+'</span></div>';
+  });
+  stepsHtml += '</div>';
+
+  // ── 9. Newick ──────────────────────────────────────────────────────────────
+  var safeNewick = newick.replace(/'/g, "'"); // simplified
+  var newickHtml =
+    '<div style="padding:10px 18px;border-top:1px solid var(--border);display:flex;align-items:flex-start;gap:8px">'+
+    '<div style="font-size:0.56rem;font-family:\'IBM Plex Mono\',monospace;color:var(--text3);word-break:break-all;flex:1;line-height:1.7">'+escHtml(newick)+'</div>'+
+    '<button onclick="navigator.clipboard.writeText(\''+safeNewick+'\')" '+
+    'style="flex-shrink:0;padding:5px 10px;background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.2);'+
+    'color:var(--cyan);border-radius:5px;font-size:0.58rem;cursor:pointer;font-family:\'IBM Plex Mono\'">Copy Newick</button>'+
+    '</div>';
+
+  container.innerHTML =
+    '<div class="phylo-wrap">'+
+    '<div class="phylo-header">'+
+      '<div style="font-size:0.82rem;font-weight:700;color:var(--amber)">🌿 Phylogenetic Tree — '+n+' sequences</div>'+
+      '<div style="font-size:0.62rem;color:var(--text3);font-family:\'IBM Plex Mono\'">UPGMA · p-distance</div>'+
+    '</div>'+
+    '<div class="phylo-canvas-wrap" style="overflow-x:auto">'+svg+'</div>'+
+    stepsHtml + newickHtml + dmHtml +
+    '</div>';
+}
+
+function _upgmaLeafOrder(names, steps) {
+  var n = names.length;
+  var groups = {};
+  names.forEach(function(nm){ groups[nm] = [nm]; });
+  steps.forEach(function(s, idx) {
+    var key = 'Node' + (n + idx);
+    groups[key] = (groups[s.a] || [s.a]).concat(groups[s.b] || [s.b]);
+  });
+  return groups['Node' + (n + steps.length - 1)] || names.slice();
+}
+
+// Lazy-load 3Dmol only when structure viewer is first opened (saves 3MB on initial load)
+var _3dmolLoaded = false;
+function _load3Dmol(callback) {
+  if (typeof $3Dmol !== 'undefined') { callback(); return; }
+  if (_3dmolLoaded) { var t=setInterval(function(){ if(typeof $3Dmol!=='undefined'){clearInterval(t);callback();} },100); return; }
+  _3dmolLoaded = true;
+  var s = document.createElement('script');
+  s.src = 'https://3dmol.csb.pitt.edu/build/3Dmol-min.js';
+  s.onload = callback;
+  document.head.appendChild(s);
+}
+
+// Wrap load3DmolPDB and loadRCSB to lazy-load 3Dmol first
+var _orig_load3DmolPDB = load3DmolPDB;
+load3DmolPDB = function(url, source) {
+  _load3Dmol(function(){ _orig_load3DmolPDB(url, source); });
+};
+var _orig_loadRCSB2 = loadRCSB;
+loadRCSB = function(pdbId) {
+  _load3Dmol(function(){ _orig_loadRCSB2(pdbId); });
+};
+</script>
+</body>
+</html>
