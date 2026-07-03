@@ -5,9 +5,10 @@ AI optional: Groq (gsk_...) or Gemini (AIza...) — both free tier.
 BLAST uses NCBI free public API.
 """
 from flask import Flask, request, jsonify, send_from_directory, Response
-import math, re, json, urllib.request, urllib.parse, urllib.error, os
+import math, re, json, urllib.request, urllib.parse, urllib.error, os, gzip, io, time
+from collections import defaultdict, deque
 
-app = Flask(__name__, static_folder='.')
+app = Flask(__name__, static_folder=None)  # no static folder — prevents directory/source exposure
 
 # ── Security ─────────────────────────────────────────────────────────────────
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(32))
@@ -15,27 +16,7 @@ app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 2 MB max request
 app.config['JSON_SORT_KEYS'] = False          # faster JSON serialization
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False  # compact JSON responses
 
-# Compression middleware
-from functools import wraps
-import gzip as _gzip, io as _io
-
-def gzip_response(f):
-    """Compress large responses with gzip for faster transfer."""
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        resp = f(*args, **kwargs)
-        if not hasattr(resp, 'data'): return resp
-        accept = request.headers.get('Accept-Encoding','')
-        if 'gzip' not in accept or len(resp.data) < 1000: return resp
-        buf = _io.BytesIO()
-        with _gzip.GzipFile(fileobj=buf, mode='wb', compresslevel=6) as gz:
-            gz.write(resp.data)
-        resp.data = buf.getvalue()
-        resp.headers['Content-Encoding'] = 'gzip'
-        resp.headers['Content-Length'] = len(resp.data)
-        resp.headers['Vary'] = 'Accept-Encoding'
-        return resp
-    return wrapper
+# Compression is handled globally in the after_request hook below (see add_headers).
 
 # Allowed domains for external fetches (SSRF protection)
 _ALLOWED_FETCH_DOMAINS = {
@@ -57,6 +38,42 @@ def _safe_fetch(url, timeout=30, **kwargs):
     if not any(domain == d or domain.endswith('.'+d) for d in _ALLOWED_FETCH_DOMAINS):
         raise ValueError(f'Fetch to {domain} not permitted')
     return urllib.request.urlopen(url, timeout=timeout, **kwargs)
+
+# ── Simple in-memory rate limiter ────────────────────────────────────────────
+# Protects expensive routes (BLAST, AI, external API calls) from abuse.
+# Per-process only (fine for a single Railway/Render instance); resets on restart.
+_rate_buckets = defaultdict(deque)
+_RATE_LIMITS = {  # route_prefix: (max_requests, window_seconds)
+    '/blast_submit':      (10, 60),
+    '/structure_search':  (20, 60),
+    '/phylo_tree':        (15, 60),
+    '/ramachandran':      (20, 60),
+    '/analyze':           (30, 60),
+}
+
+def _client_ip():
+    # Railway/Render sit behind a proxy — trust X-Forwarded-For if present
+    fwd = request.headers.get('X-Forwarded-For', '')
+    return fwd.split(',')[0].strip() if fwd else (request.remote_addr or 'unknown')
+
+def _rate_limited(path):
+    limit_conf = next((v for k, v in _RATE_LIMITS.items() if path.startswith(k)), None)
+    if not limit_conf: return False
+    max_req, window = limit_conf
+    key = f'{_client_ip()}:{path}'
+    now = time.time()
+    bucket = _rate_buckets[key]
+    while bucket and bucket[0] < now - window:
+        bucket.popleft()
+    if len(bucket) >= max_req:
+        return True
+    bucket.append(now)
+    return False
+
+@app.before_request
+def _check_rate_limit():
+    if _rate_limited(request.path):
+        return jsonify({'error': 'Too many requests — please slow down and try again in a minute.'}), 429
 
 # ═══════════════════════════════════════════════
 # CONSTANTS
@@ -107,14 +124,56 @@ AA_HYDRO = {'A':1.8,'R':-4.5,'N':-3.5,'D':-3.5,'C':2.5,'E':-3.5,'Q':-3.5,'G':-0.
             'H':-3.2,'I':4.5,'L':3.8,'K':-3.9,'M':1.9,'F':2.8,'P':-1.6,'S':-0.8,
             'T':-0.7,'W':-0.9,'Y':-1.3,'V':4.2}
 DIWV = {
-    'WW':1.0,'WC':1.0,'WE':1.0,'WM':24.68,'WQ':1.0,'WP':1.0,'WD':1.0,'WN':13.34,
-    'WI':1.0,'WA':1.0,'WV':-7.49,'WF':1.0,'WG':13.34,'WH':1.0,'WK':1.0,'WL':1.0,
-    'WR':1.0,'WS':1.0,'WY':1.0,'CW':24.68,'CC':1.0,'CE':1.0,'CM':33.6,'CQ':-6.54,
-    'CP':20.26,'CD':20.26,'CN':1.0,'CI':1.0,'CT':33.6,'CA':1.0,'CV':-6.54,'CF':1.0,
-    'CG':1.0,'CH':33.6,'CK':1.0,'CL':20.26,'CR':1.0,'CS':1.0,'CY':1.0,'KK':1.0,
-    'KR':33.6,'KE':1.0,'KM':33.6,'KQ':24.68,'KP':20.26,'KD':1.0,'KN':1.0,'KI':1.0,
-    'KT':1.0,'KA':1.0,'KV':1.0,'KF':1.0,'KG':1.0,'KH':1.0,'KC':1.0,'KL':20.26,
-    'KS':1.0,'KY':1.0,'KW':1.0,
+    'AA':1.0,'AC':44.94,'AD':-7.49,'AE':1.0,'AF':1.0,'AG':1.0,'AH':-7.49,'AI':1.0,
+    'AK':1.0,'AL':1.0,'AM':1.0,'AN':1.0,'AP':20.26,'AQ':1.0,'AR':1.0,'AS':1.0,
+    'AT':1.0,'AV':1.0,'AW':1.0,'AY':1.0,'CA':1.0,'CC':1.0,'CD':20.26,'CE':1.0,
+    'CF':1.0,'CG':1.0,'CH':33.6,'CI':1.0,'CK':1.0,'CL':20.26,'CM':33.6,'CN':1.0,
+    'CP':20.26,'CQ':-6.54,'CR':1.0,'CS':1.0,'CT':33.6,'CV':-6.54,'CW':24.68,'CY':1.0,
+    'DA':1.0,'DC':1.0,'DD':1.0,'DE':1.0,'DF':-6.54,'DG':1.0,'DH':1.0,'DI':1.0,
+    'DK':-7.49,'DL':1.0,'DM':1.0,'DN':1.0,'DP':1.0,'DQ':1.0,'DR':-6.54,'DS':1.0,
+    'DT':-14.03,'DV':1.0,'DW':1.0,'DY':1.0,'EA':1.0,'EC':44.94,'ED':20.26,'EE':33.6,
+    'EF':1.0,'EG':1.0,'EH':-6.54,'EI':20.26,'EK':1.0,'EL':1.0,'EM':1.0,'EN':1.0,
+    'EP':20.26,'EQ':20.26,'ER':1.0,'ES':20.26,'ET':1.0,'EV':1.0,'EW':-14.03,'EY':1.0,
+    'FA':1.0,'FC':1.0,'FD':13.34,'FE':1.0,'FF':1.0,'FG':1.0,'FH':1.0,'FI':1.0,
+    'FK':-14.03,'FL':1.0,'FM':1.0,'FN':1.0,'FP':20.26,'FQ':1.0,'FR':1.0,'FS':1.0,
+    'FT':1.0,'FV':1.0,'FW':1.0,'FY':33.601,'GA':-7.49,'GC':1.0,'GD':1.0,'GE':-6.54,
+    'GF':1.0,'GG':13.34,'GH':1.0,'GI':-7.49,'GK':-7.49,'GL':1.0,'GM':1.0,'GN':-7.49,
+    'GP':1.0,'GQ':1.0,'GR':1.0,'GS':1.0,'GT':-7.49,'GV':1.0,'GW':13.34,'GY':-7.49,
+    'HA':1.0,'HC':1.0,'HD':1.0,'HE':1.0,'HF':-9.37,'HG':-9.37,'HH':1.0,'HI':44.94,
+    'HK':24.68,'HL':1.0,'HM':1.0,'HN':24.68,'HP':-1.88,'HQ':1.0,'HR':1.0,'HS':1.0,
+    'HT':-6.54,'HV':1.0,'HW':-1.88,'HY':44.94,'IA':1.0,'IC':1.0,'ID':1.0,'IE':44.94,
+    'IF':1.0,'IG':1.0,'IH':13.34,'II':1.0,'IK':-7.49,'IL':20.26,'IM':1.0,'IN':1.0,
+    'IP':-1.88,'IQ':1.0,'IR':1.0,'IS':1.0,'IT':1.0,'IV':-7.49,'IW':1.0,'IY':1.0,
+    'KA':1.0,'KC':1.0,'KD':1.0,'KE':1.0,'KF':1.0,'KG':-7.49,'KH':1.0,'KI':-7.49,
+    'KK':1.0,'KL':-7.49,'KM':33.6,'KN':1.0,'KP':-6.54,'KQ':24.64,'KR':33.6,'KS':1.0,
+    'KT':1.0,'KV':-7.49,'KW':1.0,'KY':1.0,'LA':1.0,'LC':1.0,'LD':1.0,'LE':1.0,
+    'LF':1.0,'LG':1.0,'LH':1.0,'LI':1.0,'LK':-7.49,'LL':1.0,'LM':1.0,'LN':1.0,
+    'LP':20.26,'LQ':33.6,'LR':20.26,'LS':1.0,'LT':1.0,'LV':1.0,'LW':24.68,'LY':1.0,
+    'MA':13.34,'MC':1.0,'MD':1.0,'ME':1.0,'MF':1.0,'MG':1.0,'MH':58.28,'MI':1.0,
+    'MK':1.0,'ML':1.0,'MM':-1.88,'MN':1.0,'MP':44.94,'MQ':-6.54,'MR':-6.54,'MS':44.94,
+    'MT':-1.88,'MV':1.0,'MW':1.0,'MY':24.68,'NA':1.0,'NC':-1.88,'ND':1.0,'NE':1.0,
+    'NF':-14.03,'NG':-14.03,'NH':1.0,'NI':44.94,'NK':24.68,'NL':1.0,'NM':1.0,'NN':1.0,
+    'NP':-1.88,'NQ':-6.54,'NR':1.0,'NS':1.0,'NT':-7.49,'NV':1.0,'NW':-9.37,'NY':1.0,
+    'PA':20.26,'PC':-6.54,'PD':-6.54,'PE':18.38,'PF':20.26,'PG':1.0,'PH':1.0,'PI':1.0,
+    'PK':1.0,'PL':1.0,'PM':-6.54,'PN':1.0,'PP':20.26,'PQ':20.26,'PR':-6.54,'PS':20.26,
+    'PT':1.0,'PV':20.26,'PW':-1.88,'PY':1.0,'QA':1.0,'QC':-6.54,'QD':20.26,'QE':20.26,
+    'QF':-6.54,'QG':1.0,'QH':1.0,'QI':1.0,'QK':1.0,'QL':1.0,'QM':1.0,'QN':1.0,
+    'QP':20.26,'QQ':20.26,'QR':1.0,'QS':44.94,'QT':1.0,'QV':-6.54,'QW':1.0,'QY':-6.54,
+    'RA':1.0,'RC':1.0,'RD':1.0,'RE':1.0,'RF':1.0,'RG':-7.49,'RH':20.26,'RI':1.0,
+    'RK':1.0,'RL':1.0,'RM':1.0,'RN':13.34,'RP':20.26,'RQ':20.26,'RR':58.28,'RS':44.94,
+    'RT':1.0,'RV':1.0,'RW':58.28,'RY':-6.54,'SA':1.0,'SC':33.6,'SD':1.0,'SE':20.26,
+    'SF':1.0,'SG':1.0,'SH':1.0,'SI':1.0,'SK':1.0,'SL':1.0,'SM':1.0,'SN':1.0,
+    'SP':44.94,'SQ':20.26,'SR':20.26,'SS':20.26,'ST':1.0,'SV':1.0,'SW':1.0,'SY':1.0,
+    'TA':1.0,'TC':1.0,'TD':1.0,'TE':20.26,'TF':13.34,'TG':-7.49,'TH':1.0,'TI':1.0,
+    'TK':1.0,'TL':1.0,'TM':1.0,'TN':-14.03,'TP':1.0,'TQ':-6.54,'TR':1.0,'TS':1.0,
+    'TT':1.0,'TV':1.0,'TW':-14.03,'TY':1.0,'VA':1.0,'VC':1.0,'VD':-14.03,'VE':1.0,
+    'VF':1.0,'VG':-7.49,'VH':1.0,'VI':1.0,'VK':-1.88,'VL':1.0,'VM':1.0,'VN':1.0,
+    'VP':20.26,'VQ':1.0,'VR':1.0,'VS':1.0,'VT':-7.49,'VV':1.0,'VW':1.0,'VY':-6.54,
+    'WA':-14.03,'WC':1.0,'WD':1.0,'WE':1.0,'WF':1.0,'WG':-9.37,'WH':24.68,'WI':1.0,
+    'WK':1.0,'WL':13.34,'WM':24.68,'WN':13.34,'WP':1.0,'WQ':1.0,'WR':1.0,'WS':1.0,
+    'WT':-14.03,'WV':-7.49,'WW':1.0,'WY':1.0,'YA':1.0,'YC':1.0,'YD':1.0,'YE':-6.54,
+    'YF':1.0,'YG':-7.49,'YH':13.34,'YI':1.0,'YK':1.0,'YL':1.0,'YM':44.94,'YN':1.0,
+    'YP':13.34,'YQ':1.0,'YR':-15.91,'YS':1.0,'YT':-7.49,'YV':1.0,'YW':-9.37,'YY':13.34,
 }
 BLOSUM62 = {
     ('A','A'):4,('A','R'):-1,('A','N'):-2,('A','D'):-2,('A','C'):0,('A','Q'):-1,
@@ -158,11 +217,27 @@ BLOSUM62 = {
 # UTILITIES
 # ═══════════════════════════════════════════════
 def clean_seq(s): return re.sub(r'[^A-Za-z]','',s).upper()
+# IUPAC nucleotide ambiguity codes (real sequencing data often contains these
+# for uncertain base calls: R=A/G, Y=C/T, S=G/C, W=A/T, K=G/T, M=A/C,
+# B=C/G/T, D=A/G/T, H=A/C/T, V=A/C/G, N=any)
+_DNA_IUPAC = set('ATGCRYSWKMBDHVN')
+_RNA_IUPAC = set('AUGCRYSWKMBDHVN')
+_PROTEIN_AA = set('ACDEFGHIKLMNPQRSTVWYX*')
+# Letters that ONLY ever mean an amino acid — they never appear in any DNA/RNA
+# IUPAC code, so their presence rules out nucleic acid entirely.
+_PROTEIN_EXCLUSIVE = _PROTEIN_AA - _DNA_IUPAC  # {E,F,I,L,P,Q,X,*}
+
 def detect_type(s):
-    c=set(s)
-    if c<=set('ATGCN'): return 'DNA'
-    if c<=set('AUGCN'): return 'RNA'
-    if c<=set('ACDEFGHIKLMNPQRSTVWYX*'): return 'PROTEIN'
+    if not s: return 'UNKNOWN'
+    c = set(s)
+    # No protein-exclusive letters present, and every character is a valid
+    # nucleotide IUPAC code -> confidently DNA/RNA, even with ambiguity codes
+    # or the occasional stray/typo character (previously a single unexpected
+    # character like 'M' would wrongly flip a whole DNA sequence to PROTEIN).
+    if not (c & _PROTEIN_EXCLUSIVE):
+        if 'U' in c and 'T' not in c and c <= _RNA_IUPAC: return 'RNA'
+        if c <= _DNA_IUPAC: return 'DNA'
+    if c <= _PROTEIN_AA: return 'PROTEIN'
     return 'UNKNOWN'
 def complement(s): return s.translate(str.maketrans('ATGCatgc','TACGtacg'))
 def rev_complement(s): return complement(s)[::-1]
@@ -307,13 +382,19 @@ def cpg_islands(s,window=200,step=50):
     if in_island: islands.append({'start':start,'end':len(s),'length':len(s)-start})
     return islands
 
+_COMP_CHAR={'A':'T','T':'A','G':'C','C':'G','a':'t','t':'a','g':'c','c':'g'}
 def find_palindromes(s,min_len=4,max_len=8):
-    seen,res=set(),[]
+    """Find reverse-complement palindromes. Checks complementary character pairs
+    with early exit on first mismatch, instead of constructing the full
+    reverse-complement string for every candidate substring."""
+    res=[]; n=len(s)
     for length in range(min_len,max_len+1,2):
-        for i in range(len(s)-length+1):
-            sub=s[i:i+length]
-            if sub==rev_complement(sub) and (i,length) not in seen:
-                seen.add((i,length)); res.append({'position':i,'sequence':sub,'length':length})
+        half=length//2
+        for i in range(n-length+1):
+            ok=True
+            for k in range(half):
+                if _COMP_CHAR.get(s[i+k]) != s[i+length-1-k]: ok=False; break
+            if ok: res.append({'position':i,'sequence':s[i:i+length],'length':length})
     return res[:30]
 
 def find_microsatellites(s,min_repeat=3):
@@ -330,13 +411,20 @@ def find_microsatellites(s,min_repeat=3):
     res.sort(key=lambda x:-x['total_len']); return res[:20]
 
 def find_repeats(s,min_len=8,max_len=30):
-    repeats,seen=[],set()
-    for length in range(min_len,min(max_len,len(s)//2)):
-        for i in range(len(s)-length*2):
+    """Find repeated (non-overlapping) subsequences of length min_len..max_len.
+    Uses a single hash-based pass per length (O(n) per length) rather than a
+    .find() scan per starting position (O(n) per position -> O(n^2) per length),
+    which dominated total request time for longer sequences."""
+    n=len(s); repeats,seen=[],set()
+    for length in range(min_len,min(max_len,n//2)):
+        first_seen={}
+        for i in range(max(0,n-length)):
             sub=s[i:i+length]
             if sub in seen: continue
-            j=s.find(sub,i+length)
-            if j!=-1: repeats.append({'sequence':sub,'pos1':i,'pos2':j,'length':length}); seen.add(sub)
+            j=first_seen.get(sub)
+            if j is None: first_seen[sub]=i
+            elif i-j>=length:
+                repeats.append({'sequence':sub,'pos1':j,'pos2':i,'length':length}); seen.add(sub)
     repeats.sort(key=lambda x:-x['length']); return repeats[:15]
 
 def find_promoter_elements(s):
@@ -362,8 +450,9 @@ def find_promoter_elements(s):
 # ═══════════════════════════════════════════════
 # RNA SECONDARY STRUCTURE — Nussinov Algorithm
 # ═══════════════════════════════════════════════
+_RNA_PAIRS={('A','U'),('U','A'),('G','C'),('C','G'),('G','U'),('U','G')}
 def can_pair(a,b):
-    return (a,b) in {('A','U'),('U','A'),('G','C'),('C','G'),('G','U'),('U','G')}
+    return (a,b) in _RNA_PAIRS
 
 def rna_fold_nussinov(s,min_loop=3):
     """Predict RNA 2D structure using Nussinov dynamic programming."""
@@ -423,6 +512,21 @@ def gravy_score(s):
 def aromaticity(s):
     return round(sum(s.count(a) for a in 'FYW')/len(s)*100,2) if s else 0
 
+def extinction_coefficient(s):
+    """Molar extinction coefficient at 280nm (Gill & von Hippel 1989 / Pace et al. 1995,
+    the standard method used by ExPASy ProtParam). Assumes Tyr/Trp/Cys are the only
+    UV-absorbing residues at 280nm."""
+    nW,nY,nC = s.count('W'),s.count('Y'),s.count('C')
+    reduced = nW*5500+nY*1490
+    return {'reduced':reduced,'disulfide_bonds':reduced+(nC//2)*125,'nW':nW,'nY':nY,'nC':nC}
+
+def aliphatic_index(s):
+    """Ikai (1980) aliphatic index — relative volume occupied by aliphatic side chains
+    (Ala,Val,Ile,Leu). Higher values indicate greater thermostability."""
+    n=len(s)
+    if not n: return 0
+    return round(s.count('A')/n*100 + 2.9*s.count('V')/n*100 + 3.9*(s.count('I')+s.count('L'))/n*100,2)
+
 def instability_index(s):
     sc=sum(DIWV.get(s[i]+s[i+1],1.0) for i in range(len(s)-1))
     return round(10/len(s)*sc,2) if s else 0
@@ -444,19 +548,31 @@ def secondary_structure_propensity(s):
     return {'helix_score':h,'sheet_score':sh,'likely':'α-Helix dominant' if h>sh else 'β-Sheet dominant'}
 
 def hydrophobicity_profile(s,window=9):
-    """Kyte-Doolittle sliding window hydrophobicity."""
+    """Kyte-Doolittle sliding window hydrophobicity, computed with a rolling
+    sum (add the incoming residue, remove the outgoing one) instead of
+    resumming the full window at every position."""
+    n=len(s)
+    if n<window: return []
     res=[]
-    for i in range(len(s)-window+1):
-        w=s[i:i+window]; avg=sum(AA_HYDRO.get(a,0) for a in w)/window
-        res.append({'pos':i+window//2,'hydro':round(avg,3)})
+    cur=sum(AA_HYDRO.get(a,0) for a in s[:window])
+    res.append({'pos':window//2,'hydro':round(cur/window,3)})
+    for i in range(1,n-window+1):
+        cur+=AA_HYDRO.get(s[i+window-1],0)-AA_HYDRO.get(s[i-1],0)
+        res.append({'pos':i+window//2,'hydro':round(cur/window,3)})
     return res
 
 def charge_profile(s,window=7):
-    """Sliding window net charge — positive=basic region, negative=acidic."""
-    res=[]; charged={'K':1,'R':1,'H':0.5,'D':-1,'E':-1}
-    for i in range(len(s)-window+1):
-        w=s[i:i+window]; ch=sum(charged.get(a,0) for a in w)
-        res.append({'pos':i+window//2,'charge':round(ch,1)})
+    """Sliding window net charge — positive=basic region, negative=acidic.
+    Rolling sum, same approach as hydrophobicity_profile."""
+    n=len(s)
+    if n<window: return []
+    charged={'K':1,'R':1,'H':0.5,'D':-1,'E':-1}
+    res=[]
+    cur=sum(charged.get(a,0) for a in s[:window])
+    res.append({'pos':window//2,'charge':round(cur,1)})
+    for i in range(1,n-window+1):
+        cur+=charged.get(s[i+window-1],0)-charged.get(s[i-1],0)
+        res.append({'pos':i+window//2,'charge':round(cur,1)})
     return res
 
 def charge_vs_ph(s):
@@ -883,6 +999,8 @@ def _build_prompt(stype, slen, r):
             f"Molecular weight: {r['protein_mw']} Da. Isoelectric point (pI): {r['pi']}.",
             f"GRAVY score: {r['gravy']} ({'hydrophobic' if float(str(r['gravy']).replace(',','')) > 0 else 'hydrophilic'}).",
             f"Instability index: {r['instability']} ({'stable in vitro' if float(str(r['instability']).replace(',','')) < 40 else 'unstable in vitro'}).",
+            f"Aliphatic index: {r.get('aliphatic_index','?')} (higher = more thermostable).",
+            f"Extinction coefficient (280nm, reduced): {r.get('extinction',{}).get('reduced','?')} M^-1cm^-1.",
             f"Predicted transmembrane helices: {len(r.get('tm_helices', []))}.",
             f"Signal peptide: {'detected' if r.get('signal_peptide', {}).get('detected') else 'not detected'}.",
         ]
@@ -901,9 +1019,9 @@ def _groq(prompt, key):
     for model in ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'llama3-8b-8192']:
         try:
             req = urllib.request.Request('https://api.groq.com/openai/v1/chat/completions',
-                data=json.dumps({'model': model, 'messages': [{'role': 'user', 'content': prompt}], 'max_tokens': 2000}).encode(),
+                data=json.dumps({'model': model, 'messages': [{'role': 'user', 'content': prompt}], 'max_tokens': 3000}).encode(),
                 headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {key}'})
-            with _safe_fetch(req, timeout=20) as r:
+            with _safe_fetch(req, timeout=30) as r:
                 return {'text': json.loads(r.read())['choices'][0]['message']['content'], 'model': model}
         except urllib.error.HTTPError as e:
             b = e.read().decode('utf-8', 'ignore')
@@ -915,7 +1033,7 @@ def _groq(prompt, key):
     return {'text': 'All Groq models unavailable.', 'model': ''}
 
 def _gemini(prompt, key):
-    # Current free-tier models as of 2026 (newest first)
+    # Current free-tier models (newest first)
     models = [
         'gemini-3.5-flash',
         'gemini-3.1-flash',
@@ -928,34 +1046,82 @@ def _gemini(prompt, key):
     for model in models:
         try:
             url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}'
-            req = urllib.request.Request(url,
-                data=json.dumps({'contents':[{'parts':[{'text':prompt}]}],
-                                 'generationConfig':{'maxOutputTokens':2000,'temperature':0.7}}).encode(),
+            gen_config = {'maxOutputTokens': 4096, 'temperature': 0.7}
+            # Gemini 2.5+/3.x models "think" before answering, silently eating the token
+            # budget and truncating the visible answer. Disabling thinking (where supported)
+            # ensures the full budget goes to the actual written response.
+            if any(t in model for t in ('2.5', '3.')):
+                gen_config['thinkingConfig'] = {'thinkingBudget': 0}
+            body = json.dumps({'contents':[{'parts':[{'text':prompt}]}],
+                                'generationConfig': gen_config}).encode()
+            req = urllib.request.Request(url, data=body,
                 headers={'Content-Type':'application/json','User-Agent':'AaronsArchive/3.2'})
-            with _safe_fetch(req, timeout=20) as r:
-                text = json.loads(r.read())['candidates'][0]['content']['parts'][0]['text']
-                return {'text': text, 'model': model}
+            with _safe_fetch(req, timeout=30) as r:
+                data = json.loads(r.read())
+            candidates = data.get('candidates') or []
+            if not candidates:
+                fb = data.get('promptFeedback', {}).get('blockReason', 'no candidates returned')
+                return {'text': f'Gemini returned no output (reason: {fb}). Try rephrasing or use a different model.', 'model': model}
+            cand = candidates[0]
+            finish = cand.get('finishReason', '')
+            parts = cand.get('content', {}).get('parts', [])
+            text = ''.join(p.get('text','') for p in parts if 'text' in p)
+            if not text.strip():
+                # Thinking-only response with no visible output — retry next model with thinking forced off
+                if finish == 'MAX_TOKENS' and 'thinkingConfig' not in gen_config:
+                    continue
+                return {'text': f'Gemini ({model}) returned an empty response (finish reason: {finish}). Trying a different model may help.', 'model': model}
+            note = ''
+            if finish == 'MAX_TOKENS':
+                note = '\n\n[Response was cut off at the token limit — the analysis above may be incomplete.]'
+            return {'text': text + note, 'model': model}
         except urllib.error.HTTPError as e:
             b = e.read().decode('utf-8','ignore')
-            if e.code == 400: return f'Gemini key invalid. Get a fresh key at aistudio.google.com. Details: {b[:150]}'
-            if e.code == 403: return 'Gemini key rejected — go to aistudio.google.com → Get API Key → enable Gemini API.'
-            if e.code == 429: return 'Gemini rate limit hit — wait 1 minute and try again.'
+            if e.code == 400: return {'text': f'Google rejected this key: {b[:200]}', 'model': ''}
+            if e.code == 403: return {'text': f'Gemini access denied. Details: {b[:200]}', 'model': ''}
+            if e.code == 429: return {'text': 'Gemini rate limit hit — wait 1 minute and try again.', 'model': ''}
             if e.code == 404: continue  # model not found, try next
-            return f'Gemini error {e.code}: {b[:200]}'
+            return {'text': f'Gemini error {e.code}: {b[:200]}', 'model': ''}
         except Exception as e:
-            return f'Gemini error: {str(e)[:150]}'
-    return 'No Gemini model available — try again later or use a Groq key (gsk_...) from console.groq.com'
+            return {'text': f'Gemini error: {str(e)[:150]}', 'model': ''}
+    return {'text': 'No Gemini model available — try again later or use a Groq key (gsk_...) from console.groq.com', 'model': ''}
+
+def _clean_api_key(raw):
+    """Strip whitespace, invisible unicode characters, and common copy-paste
+    artifacts (quotes, 'Bearer ' prefix, accidental labels) from a pasted API key."""
+    key = raw.strip()
+    # Strip zero-width/invisible unicode characters that .strip() doesn't catch
+    for ch in ('\u200b', '\u200c', '\u200d', '\ufeff', '\u200e', '\u200f'):
+        key = key.replace(ch, '')
+    key = key.strip()
+    # Strip surrounding quotes
+    if len(key) >= 2 and key[0] == key[-1] and key[0] in ('"', "'"):
+        key = key[1:-1].strip()
+    # Strip accidental "Bearer " prefix
+    if key.lower().startswith('bearer '):
+        key = key[7:].strip()
+    # Strip accidental label prefixes like "API Key:" or "Key:"
+    key = re.sub(r'^(api[\s_-]?key|key)\s*[:=]\s*', '', key, flags=re.IGNORECASE)
+    return key.strip()
 
 def run_ai(prompt, key):
-    key = key.strip()
-    if key.startswith('AIza'):
-        result = _gemini(prompt, key)
-        if isinstance(result, dict): return result
-        return {'text': result, 'model': 'gemini'}
+    key = _clean_api_key(key or '')
+    if not key:
+        return {'text': 'No API key provided.', 'model': 'none'}
+    if len(key) < 8:
+        return {'text': f'That doesn\'t look like a complete API key ({len(key)} characters). Double-check you copied the whole thing.', 'model': 'none'}
     if key.startswith('gsk_'):
-        text = _groq(prompt, key)
-        return {'text': text, 'model': 'groq/llama'}
-    return {'text': "Unknown key format. Groq keys start with 'gsk_' (console.groq.com). Gemini keys start with 'AIza' (aistudio.google.com).", 'model': 'none'}
+        result = _groq(prompt, key)
+        return result if isinstance(result, dict) else {'text': result, 'model': 'groq'}
+    # Everything else is treated as a Gemini credential. We deliberately do NOT
+    # hard-gate on a fixed prefix like 'AIza' here: Google has changed this format
+    # before (rolling out 'AQ.'-prefixed Auth keys through 2026 as 'AIza' Standard
+    # keys are phased out) and will likely do so again. Baking a specific prefix
+    # into our own validation just means we reject perfectly valid keys the moment
+    # the provider's format shifts. Instead we pass the key straight to Google's
+    # API and let its own response be the source of truth on whether it's valid.
+    result = _gemini(prompt, key)
+    return result if isinstance(result, dict) else {'text': result, 'model': 'gemini'}
 
 # ═══════════════════════════════════════════════
 # PDF REPORT
@@ -992,7 +1158,10 @@ def make_report(data):
         b+=f'<h2>Properties</h2><div class="g"><div class="t"><div class="v">{data.get("protein_mw",0)/1000:.3f}</div><div class="l">MW (kDa)</div></div><div class="t"><div class="v">{data.get("pi",0)}</div><div class="l">pI</div></div><div class="t"><div class="v">{data.get("gravy",0)}</div><div class="l">GRAVY</div></div><div class="t"><div class="v">{data.get("instability",0)}</div><div class="l">Instability</div></div></div>'
         b+=f'<p>Structure: <b>{data.get("secondary",{}).get("likely","?")}</b> | TM Helices: <b>{len(data.get("tm_helices",[]))}</b> | Signal peptide: <b>{"Yes" if data.get("signal_peptide",{}).get("detected") else "No"}</b></p>'
     ai=data.get('ai_analysis')
-    if ai: b+=f'<h2>AI Interpretation</h2><div class="ai">{ai}</div>'
+    if ai:
+        import html as _html
+        ai_safe = _html.escape(str(ai)).replace('\n','<br>')
+        b+=f'<h2>AI Interpretation</h2><div class="ai">{ai_safe}</div>'
     b+=f'<div class="ft">Aaron\'s Archive | {now}</div></div>'
     return f"<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Aaron's Archive Report</title>{css}</head><body>{b}</body></html>"
 
@@ -1163,7 +1332,10 @@ def index():
 def analyze():
     d=request.json; raw=d.get('sequence','').strip()
     if not raw: return jsonify({'error':'No sequence provided'}),400
-    seq=clean_seq(raw); st=detect_type(seq)
+    seq=clean_seq(raw)
+    if len(seq)>150000: return jsonify({'error':'Sequence too long (max 150,000 characters). Use Batch FASTA for multiple large sequences.'}),400
+    if not seq: return jsonify({'error':'No valid sequence characters found'}),400
+    st=detect_type(seq)
     res={'type':st,'length':len(seq),'sequence_preview':seq[:100]}
     if st in ('DNA','RNA'):
         if st=='RNA': seq=seq.replace('U','T')
@@ -1181,6 +1353,7 @@ def analyze():
     elif st=='PROTEIN':
         res.update({'protein_mw':protein_mw(seq),'pi':isoelectric_point(seq),'gravy':gravy_score(seq),
             'aromaticity':aromaticity(seq),'instability':instability_index(seq),
+            'extinction':extinction_coefficient(seq),'aliphatic_index':aliphatic_index(seq),
             'aa_composition':aa_composition(seq),'secondary':secondary_structure_propensity(seq),
             'hydro_profile':hydrophobicity_profile(seq),'charge_profile':charge_profile(seq),'charge_vs_ph':charge_vs_ph(seq),
             'tm_helices':transmembrane_helices(seq),'signal_peptide':signal_peptide(seq),
@@ -1215,12 +1388,14 @@ def primers_adv():
     if not raw: return jsonify({'error':'No sequence'}),400
     seq=clean_seq(raw)
     if len(seq)<60: return jsonify({'error':'Min 60 bp required'}),400
+    if len(seq)>50000: return jsonify({'error':'Max 50,000 bp for primer design'}),400
     return jsonify({'count':8,'pairs':advanced_primers(seq)})
 
 @app.route('/blast_submit',methods=['POST'])
 def blast_sub():
     d=request.json; seq=clean_seq(d.get('sequence',''))
     if not seq: return jsonify({'error':'No sequence'}),400
+    if len(seq)>10000: return jsonify({'error':'Max 10,000 bp for BLAST (NCBI limits apply)'}),400
     st=detect_type(seq); prog='blastp' if st=='PROTEIN' else 'blastn'
     db=d.get('database','nt' if prog=='blastn' else 'nr')
     try: return jsonify(blast_submit(seq,program=prog,database=db))
@@ -1244,6 +1419,8 @@ def structure_route():
     d=request.json
     gene=d.get('gene','').strip().upper()
     if not gene: return jsonify({'error':'No gene name'}),400
+    if len(gene)>40 or not re.match(r'^[A-Z0-9\-\.]+$', gene):
+        return jsonify({'error':'Invalid gene name format'}),400
     try: return jsonify(structure_search(gene))
     except Exception as e: return jsonify({'error':str(e)}),500
 
@@ -1272,6 +1449,21 @@ def add_headers(resp):
     resp.headers['X-Content-Type-Options'] = 'nosniff'
     resp.headers['X-Frame-Options'] = 'SAMEORIGIN'
     resp.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    resp.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+    # Gzip compress JSON/HTML/text responses over 1KB when the client supports it
+    accept_enc = request.headers.get('Accept-Encoding', '')
+    if ('gzip' in accept_enc and not resp.direct_passthrough
+            and resp.content_type and
+            any(t in resp.content_type for t in ('json', 'html', 'text'))
+            and len(resp.get_data()) > 1024
+            and 'Content-Encoding' not in resp.headers):
+        buf = io.BytesIO()
+        with gzip.GzipFile(fileobj=buf, mode='wb', compresslevel=6) as gz:
+            gz.write(resp.get_data())
+        resp.set_data(buf.getvalue())
+        resp.headers['Content-Encoding'] = 'gzip'
+        resp.headers['Content-Length'] = str(len(resp.get_data()))
+        resp.headers['Vary'] = 'Accept-Encoding'
     return resp
 
 if __name__=='__main__':

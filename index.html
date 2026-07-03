@@ -7,7 +7,6 @@
 <meta name="theme-color" content="#0a1628">
 <link rel="preconnect" href="https://cdnjs.cloudflare.com">
 <link rel="preconnect" href="https://3dmol.csb.pitt.edu">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Aaron's Archive — DNA Analysis Engine</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
@@ -66,7 +65,30 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .tool-section.active{display:block}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .layout{max-width:1480px;margin:0 auto;padding:22px;display:grid;grid-template-columns:370px 1fr;gap:18px;align-items:start}
-@media(max-width:900px){.layout{grid-template-columns:1fr}}
+@media(max-width:900px){
+  .layout{grid-template-columns:1fr;padding:14px;gap:14px}
+  /* CRITICAL FIX: input-panel used position:sticky designed for the desktop
+     two-column layout. On mobile the grid collapses to one column, but the
+     panel kept floating/pinning at top:98px while the results below it
+     scrolled underneath — causing the reported overlap. Disable sticky here. */
+  .input-panel{position:static;top:auto}
+  .topbar{padding:0 14px;gap:8px}
+  .brand h1{font-size:0.8rem;letter-spacing:0.14em}
+  .brand-sub{font-size:0.48rem}
+  .toolnav-inner{padding:0 10px}
+  .tnav{padding:11px 12px;font-size:0.58rem}
+  .codon-grid{grid-template-columns:repeat(5,1fr)}
+  .struct-viewer{height:320px}
+  .help-panel{width:100vw}
+}
+@media(max-width:480px){
+  .layout{padding:10px}
+  .status-pill span{display:none}  /* keep just the dot, save space for the title */
+  .status-pill{padding:5px}
+  .brand h1{font-size:0.72rem}
+  .codon-grid{grid-template-columns:repeat(4,1fr)}
+  .tile-grid{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}
+}
 
 /* ── INPUT PANEL ── */
 .input-panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;
@@ -161,8 +183,6 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
   display:flex;align-items:center;gap:7px}
 .sec-head::before{content:'';display:block;width:2px;height:11px;background:var(--cyan);border-radius:2px}
 .chart-box{background:#020810;border:1px solid var(--border);border-radius:9px;padding:14px;margin-bottom:14px}
-.chart-title{font-size:0.58rem;letter-spacing:0.16em;text-transform:uppercase;
-  font-family:'IBM Plex Mono',monospace;color:var(--text3);margin-bottom:10px}
 .data-table{width:100%;border-collapse:collapse;font-size:0.76rem}
 .data-table th{background:var(--panel2);color:var(--text2);padding:7px 11px;text-align:left;
   font-weight:500;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;
@@ -312,7 +332,6 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
 .phylo-wrap{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .phylo-header{padding:14px 18px;background:var(--panel2);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
 .phylo-canvas-wrap{padding:18px;overflow:auto;min-height:400px;background:#020810}
-.phylo-info{padding:12px 18px;background:var(--panel2);border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .phylo-dm{overflow-x:auto;padding:12px 18px;background:#020810;border-top:1px solid var(--border)}
 .phylo-dm table{border-collapse:collapse;font-family:'IBM Plex Mono',monospace;font-size:0.6rem}
 .phylo-dm td,.phylo-dm th{padding:4px 8px;border:1px solid var(--border);text-align:right}
@@ -324,7 +343,6 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
 /* ── RAMACHANDRAN ── */
 .rama-wrap{background:var(--panel2);border-top:1px solid var(--border);padding:14px 18px}
 .rama-title{font-size:0.72rem;font-weight:700;color:var(--cyan);margin-bottom:10px}
-.rama-canvas-wrap{position:relative;width:100%;aspect-ratio:1/1;max-width:380px;margin:0 auto}
 .rama-legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;font-size:0.6rem;font-family:'IBM Plex Mono',monospace}
 .rama-legend span{display:flex;align-items:center;gap:4px;color:var(--text2)}
 </style>
@@ -388,10 +406,10 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
       </div>
       <div class="field">
         <label>🤖 AI Key <span style="color:var(--green);font-size:0.54rem;font-weight:400">(optional — free)</span></label>
-        <input type="password" id="apiKey" placeholder="gsk_...  or  AIza...">
+        <input type="password" id="apiKey" placeholder="gsk_...  or  AIza...  or  AQ....">
         <div class="hint">
           <b style="color:var(--amber)">Groq</b> (free): <a href="https://console.groq.com" target="_blank">console.groq.com</a> — key starts with <code style="color:var(--green)">gsk_</code><br>
-          <b style="color:var(--cyan)">Gemini</b> (free): <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a> — key starts with <code style="color:var(--green)">AIza</code>
+          <b style="color:var(--cyan)">Gemini</b> (free): <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a> — any key from AI Studio works, whatever prefix it shows you
         </div>
       </div>
       <button class="btn-run" id="analyzeBtn" onclick="runAnalyze()">▶ &nbsp;Run Deep Analysis</button>
@@ -518,17 +536,18 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
       </div>
       <div class="field">
         <label>Database</label>
-        <select id="blastDb">
-          <option value="nt">nt — Nucleotide (for DNA/RNA)</option>
-          <option value="nr">nr — Non-redundant (for protein)</option>
+        <select id="blastDb" onchange="updateDbSpeedHint()">
+          <option value="nt">nt — Nucleotide, DNA/RNA (fast)</option>
+          <option value="refseq_protein">RefSeq Protein — curated, fast ★ recommended</option>
+          <option value="swissprot">SwissProt — small, curated, fastest</option>
+          <option value="nr">nr — Non-redundant protein, ALL sequences (slow, 1-5+ min)</option>
           <option value="refseq_rna">RefSeq RNA</option>
-          <option value="refseq_protein">RefSeq Protein</option>
-          <option value="swissprot">SwissProt (curated proteins)</option>
         </select>
+        <div id="dbSpeedHint" style="margin-top:6px;font-size:0.62rem;color:var(--text3);font-family:'IBM Plex Mono',monospace"></div>
       </div>
       <div class="samples">
         <button class="samp" onclick="loadSample('tp53',true)">▶ TP53 DNA</button>
-        <button class="samp" onclick="loadSample('protein',true)">▶ KRAS protein</button>
+        <button class="samp" onclick="loadSample('protein',true,'refseq_protein')">▶ KRAS protein</button>
       </div>
       <button class="btn-run" id="blastBtn" onclick="runBlast()">🔍 &nbsp;Submit to NCBI BLAST</button>
       <div class="err-box" id="blastErr"></div>
@@ -696,6 +715,14 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
           <div class="help-def">The fraction of aromatic amino acids (Phenylalanine F, Tyrosine Y, Tryptophan W). These absorb UV light at 280 nm — this is how we measure protein concentration in lab (spectrophotometry with a NanoDrop machine). High aromaticity also stabilizes protein structure through π-stacking interactions.<div class="help-eg">W absorbs most strongly, then Y. To measure protein concentration without a standard curve, we use: A280 = (5500 × W + 1490 × Y + 125 × C) / molecular weight</div></div>
         </div>
         <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Extinction Coefficient (ε280)</div>
+          <div class="help-def">How strongly a protein absorbs UV light at 280nm per mole, in M⁻¹cm⁻¹ — used with the Beer-Lambert law (A=εcl) to calculate protein concentration directly from an absorbance reading, without needing a standard curve. Calculated from Trp, Tyr, and cystine (disulfide-bonded Cys) content using the Gill & von Hippel / Pace method — the same one ExPASy ProtParam uses.<div class="help-eg">Concentration (M) = A280 ÷ ε280. If A280 = 0.5 and ε280 = 37,000, concentration ≈ 13.5 μM.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Aliphatic Index</div>
+          <div class="help-def">A measure of thermostability based on the relative volume occupied by aliphatic side chains (Ala, Val, Ile, Leu) — proteins with a higher aliphatic index tend to remain folded and stable across a wider temperature range. Introduced by Ikai (1980).<div class="help-eg">Thermostable/thermophilic proteins often score 80-100+. Typical mesophilic (room-temperature) proteins score around 60-90.</div></div>
+        </div>
+        <div class="help-item">
           <div class="help-term" onclick="toggleTerm(this)">Secondary Structure (Chou-Fasman)</div>
           <div class="help-def">Proteins fold into characteristic shapes. α-Helix = spring/coil (like a spiral staircase). β-Sheet = flat strands side by side (like a folded paper fan). The Chou-Fasman method predicts which is favored by scoring each amino acid's tendency to form helices vs. sheets based on statistical analysis of known protein structures.<div class="help-eg">Alanine (A) strongly prefers helix. Valine (V) and Isoleucine (I) prefer beta-sheet. Glycine (G) and Proline (P) break helices.</div></div>
         </div>
@@ -750,6 +777,14 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
           <div class="help-def">Expect value = how many hits this good you'd expect by random chance. Lower = more significant. E=0 or &lt;1e-100 = perfect/near-perfect, definitely not random. E=1e-10 to 1e-50 = very significant. E=0.01 to 1 = possibly significant. E&gt;10 = likely random. When comparing against databases of billions of sequences, even E=0.001 can be meaningful.<div class="help-eg">Finding E=3.2e-98 for a 200bp sequence means this match is astronomically unlikely by chance — it's definitely a real biological homology.</div></div>
         </div>
         <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">Ramachandran Plot — what it shows</div>
+          <div class="help-def">A plot of every residue's two backbone twist angles — φ (phi, rotation around N–Cα) and ψ (psi, rotation around Cα–C) — which together determine how the protein chain folds at that point. Not every angle combination is physically possible without atoms colliding, so the plot is shaded into <b style="color:#22d3ee">favored</b> (ideal, low-strain), <b style="color:#f0b429">allowed</b> (still reasonable), and unshaded <b style="color:#f87171">outlier</b> regions. This is the same backbone-geometry check structural biologists use (e.g. via MolProbity) to judge whether a solved or predicted structure is trustworthy.<div class="help-eg">&gt;90% of residues in the favored region is typical of a good-quality structure. A high outlier percentage can mean a genuinely flexible loop, an active-site distortion — or a lower-resolution/lower-confidence structure worth double-checking.</div></div>
+        </div>
+        <div class="help-item">
+          <div class="help-term" onclick="toggleTerm(this)">3D Structure Viewer (AlphaFold &amp; PDB)</div>
+          <div class="help-def">After BLAST identifies a gene, Aaron's Archive can pull up its predicted or experimentally solved 3D structure — AlphaFold for AI-predicted models, RCSB PDB for real crystal/cryo-EM structures. AlphaFold structures are colored by pLDDT confidence: blue/high-confidence regions are trustworthy, orange/red low-confidence regions (often flexible loops or disordered regions) are less certain.<div class="help-eg">A protein with mostly blue coloring and a compact fold is a confident, likely-accurate prediction. Long red stretches often mean intrinsically disordered regions that don't have one fixed shape in reality.</div></div>
+        </div>
+        <div class="help-item">
           <div class="help-term" onclick="toggleTerm(this)">Batch FASTA analysis</div>
           <div class="help-def">Instead of analyzing one sequence at a time, paste multiple sequences in FASTA format and get a comparison table. Useful for: comparing GC content across many genes, screening multiple variants for restriction sites, comparing sequences from different samples in an experiment.<div class="help-eg">Analyzing 20 different bacterial isolates for antibiotic resistance gene content — one click gives you a comparison table.</div></div>
         </div>
@@ -798,11 +833,15 @@ const SAMPLES = {
   rna:     'AUGGCCUCGUGGAUGCGCCUCCUGCCCAUGCUGGCGCUGCUGGCCCUCUGGGGACCUGACCCAGCCGCAGCCUUUGUGAACCAACACCTGUGCGGCUCACACCUGGUGGA'
 };
 
-function loadSample(k, toBlast=false) {
+function loadSample(k, toBlast=false, db=null) {
   const v = (SAMPLES[k]||'').replace(/\s/g,'');
   const id = toBlast ? 'blastInput' : 'seqInput';
   document.getElementById(id).value = v;
   if (!toBlast) updateTypeLabel(v);
+  if (toBlast && db) {
+    const dbEl = document.getElementById('blastDb');
+    if (dbEl) { dbEl.value = db; updateDbSpeedHint(); }
+  }
 }
 
 function updateTypeLabel(s) {
@@ -816,6 +855,21 @@ function updateTypeLabel(s) {
   else el.textContent = '';
 }
 document.getElementById('seqInput').addEventListener('input', e => updateTypeLabel(e.target.value));
+
+function updateDbSpeedHint() {
+  const db = document.getElementById('blastDb');
+  const hint = document.getElementById('dbSpeedHint');
+  if (!db || !hint) return;
+  const SPEED = {
+    nt:              '⚡ Typically 20-60 seconds.',
+    refseq_protein:  '⚡ Typically 20-60 seconds — curated, usually enough to identify a protein.',
+    swissprot:       '⚡⚡ Typically 15-40 seconds — smallest, fastest, but may miss obscure proteins.',
+    nr:              '🐢 Can take 1-5+ minutes, longer during NCBI peak hours (US daytime). Searches every known sequence.',
+    refseq_rna:      '⚡ Typically 20-60 seconds.',
+  };
+  hint.textContent = SPEED[db.value] || '';
+}
+updateDbSpeedHint();
 
 // ── TOOL SWITCHING ────────────────────────────
 function switchTool(name) {
@@ -925,6 +979,8 @@ function renderResults(d,container){
       <div class="stat-tile"><div class="tile-lbl">GRAVY</div><div class="tile-val ${d.gravy>0?'vg':'vr'}">${d.gravy}</div><div class="tile-sub">${d.gravy>0?'Hydrophobic':'Hydrophilic'}</div></div>
       <div class="stat-tile"><div class="tile-lbl">Instability</div><div class="tile-val ${d.instability<40?'vg':'vr'}">${d.instability}</div><div class="tile-sub">${d.instability<40?'Stable':'Unstable'}</div></div>
       <div class="stat-tile"><div class="tile-lbl">Aromaticity</div><div class="tile-val vp">${d.aromaticity}<span style="font-size:0.8rem">%</span></div><div class="tile-sub">F+Y+W content</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Aliphatic Index</div><div class="tile-val va">${d.aliphatic_index}</div><div class="tile-sub">Thermostability</div></div>
+      <div class="stat-tile"><div class="tile-lbl">Ext. Coeff. (280nm)</div><div class="tile-val vc" style="font-size:0.95rem">${(d.extinction?d.extinction.reduced:0).toLocaleString()}</div><div class="tile-sub">M⁻¹cm⁻¹, reduced</div></div>
       <div class="stat-tile"><div class="tile-lbl">Net Charge pH 7</div><div class="tile-val ${d.charge_at_7>0?'vc':'vr'}">${d.charge_at_7}</div></div>
       <div class="stat-tile"><div class="tile-lbl">TM Helices</div><div class="tile-val va">${(d.tm_helices||[]).length}</div><div class="tile-sub">Membrane spans</div></div>
       <div class="stat-tile"><div class="tile-lbl">Signal Peptide</div><div class="tile-val ${d.signal_peptide&&d.signal_peptide.detected?'vg':'vr'}">${d.signal_peptide&&d.signal_peptide.detected?'YES':'NO'}</div></div>`;
@@ -1389,29 +1445,47 @@ async function runBatch(){
 }
 
 function renderBatch(d,container){
-  const r=d.results; const isDNA=r[0]&&r[0].gc!==undefined;
+  const r=d.results;
+  const dnaCount=r.filter(x=>x.gc!==undefined).length;
+  const protCount=r.filter(x=>x.mw_kda!==undefined).length;
+  const mixed = dnaCount>0 && protCount>0;
+  const fmt=(v,suffix='')=> (v===undefined||v===null) ? '<span style="color:var(--text3)">—</span>' : (v+suffix);
   let html=`<div class="tile-grid" style="margin-bottom:14px">
     <div class="stat-tile"><div class="tile-lbl">Sequences</div><div class="tile-val va">${d.count}</div></div>
-    ${isDNA?`<div class="stat-tile"><div class="tile-lbl">Avg GC%</div><div class="tile-val vc">${(r.reduce((s,x)=>s+(x.gc||0),0)/r.length).toFixed(1)}%</div></div>
-    <div class="stat-tile"><div class="tile-lbl">Total ORFs</div><div class="tile-val vp">${r.reduce((s,x)=>s+(x.orfs||0),0)}</div></div>
-    <div class="stat-tile"><div class="tile-lbl">Avg Length</div><div class="tile-val vg">${Math.round(r.reduce((s,x)=>s+x.length,0)/r.length).toLocaleString()} bp</div></div>`:''}
+    ${dnaCount?`<div class="stat-tile"><div class="tile-lbl">Avg GC% (DNA/RNA)</div><div class="tile-val vc">${(r.filter(x=>x.gc!==undefined).reduce((s,x)=>s+(x.gc||0),0)/dnaCount).toFixed(1)}%</div></div>
+    <div class="stat-tile"><div class="tile-lbl">Total ORFs</div><div class="tile-val vp">${r.reduce((s,x)=>s+(x.orfs||0),0)}</div></div>`:''}
+    ${protCount?`<div class="stat-tile"><div class="tile-lbl">Protein Seqs</div><div class="tile-val vg">${protCount}</div></div>`:''}
   </div>
   <div class="tabs-wrap"><div style="padding:18px">
-    <div class="sec-head">Comparison Table</div>
+    <div class="sec-head">Comparison Table${mixed?' <span style="font-weight:400;color:var(--text3);font-size:0.7rem">(mixed DNA/RNA + protein — showing all applicable stats)</span>':''}</div>
     <div style="overflow-x:auto">`;
-  if(isDNA){
-    html+=`<table class="data-table"><thead><tr><th>Name</th><th>Type</th><th>Length</th><th>GC%</th><th>Tm</th><th>MW kDa</th><th>ORFs</th><th>Restr.</th><th>Complexity</th></tr></thead><tbody>`;
-    r.forEach(x=>{html+=`<tr><td style="color:var(--amber);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(x.name)}</td><td><span class="badge bg">${x.type}</span></td><td style="color:var(--cyan)">${x.length.toLocaleString()}</td><td><span style="color:${x.gc<40||x.gc>60?'var(--red)':'var(--green)'}">${x.gc}%</span></td><td>${x.tm_nn}°C</td><td>${x.mw}</td><td style="color:var(--purple)">${x.orfs}</td><td>${x.restriction_count}</td><td>${x.entropy}%</td></tr>`;});
-    html+=`</tbody></table>`;
-  }else{
-    html+=`<table class="data-table"><thead><tr><th>Name</th><th>Length</th><th>MW kDa</th><th>pI</th><th>GRAVY</th><th>Instability</th></tr></thead><tbody>`;
-    r.forEach(x=>{html+=`<tr><td style="color:var(--amber)">${escHtml(x.name)}</td><td>${x.length}</td><td>${x.mw_kda}</td><td>${x.pi}</td><td style="color:${x.gravy>0?'var(--green)':'var(--red)'}">${x.gravy}</td><td style="color:${x.instability<40?'var(--green)':'var(--red)'}">${x.instability}</td></tr>`;});
-    html+=`</tbody></table>`;
-  }
+  // Always show a unified table with a Type column; render each stat only for
+  // rows where it actually applies (previously the format was locked based on
+  // row[0]'s type alone, showing "undefined" for every mismatched row in a
+  // mixed batch).
+  html+=`<table class="data-table"><thead><tr><th>Name</th><th>Type</th><th>Length</th>
+    <th>GC%</th><th>Tm</th><th>MW</th><th>ORFs</th><th>pI</th><th>GRAVY</th><th>Instability</th></tr></thead><tbody>`;
+  r.forEach(x=>{
+    const isDnaRow = x.gc!==undefined;
+    const isProtRow = x.mw_kda!==undefined;
+    html+=`<tr>
+      <td style="color:var(--amber);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(x.name)}</td>
+      <td><span class="badge ${isProtRow?'bp':'bg'}">${x.type}</span></td>
+      <td style="color:var(--cyan)">${x.length.toLocaleString()}</td>
+      <td>${isDnaRow?`<span style="color:${x.gc<40||x.gc>60?'var(--red)':'var(--green)'}">${x.gc}%</span>`:fmt()}</td>
+      <td>${isDnaRow?fmt(x.tm_nn,'°C'):fmt()}</td>
+      <td>${isDnaRow?fmt(x.mw)+' kDa':isProtRow?fmt(x.mw_kda)+' kDa':fmt()}</td>
+      <td style="color:var(--purple)">${isDnaRow?fmt(x.orfs):fmt()}</td>
+      <td>${isProtRow?fmt(x.pi):fmt()}</td>
+      <td style="color:${isProtRow&&x.gravy>0?'var(--green)':isProtRow?'var(--red)':'var(--text)'}">${isProtRow?fmt(x.gravy):fmt()}</td>
+      <td style="color:${isProtRow&&x.instability<40?'var(--green)':isProtRow?'var(--red)':'var(--text)'}">${isProtRow?fmt(x.instability):fmt()}</td>
+    </tr>`;
+  });
+  html+=`</tbody></table>`;
   html+=`</div><div class="export-bar"><button class="export-btn" onclick='exportBatchCSV(${JSON.stringify(r)})'>⬇ Export CSV</button></div></div></div>`;
   container.innerHTML=html;
 }
-function exportBatchCSV(r){const keys=Object.keys(r[0]);dl([keys.join(','),...r.map(x=>keys.map(k=>x[k]??'').join(','))].join('\n'),'helix_batch.csv','text/csv');}
+function exportBatchCSV(r){const keys=[...new Set(r.flatMap(Object.keys))];dl([keys.join(','),...r.map(x=>keys.map(k=>x[k]??'').join(','))].join('\n'),'aarons_archive_batch.csv','text/csv');}
 
 // ── TOOL 3: ALIGNMENT ─────────────────────────
 function loadAlignSample(t){
@@ -1524,16 +1598,20 @@ function exportPrimersCSV(pairs){
 
 // ── TOOL 5: BLAST ─────────────────────────
 let _blastRID = null;
+let _blastDb = 'nt';
+let _cdTimer = null;
 let _blastTimer = null;
 
 async function runBlast() {
   const seq = document.getElementById('blastInput').value.trim();
   const db  = document.getElementById('blastDb').value;
+  _blastDb = db;
   if (!seq) { showErr('blastErr','Paste a sequence first'); return; }
   const clean = seq.replace(/[\s>][^\n]*/g,'').replace(/\s/g,'');
   if (clean.length > 2000) { showErr('blastErr','Max 2000 bp for BLAST speed. Trim your sequence.'); return; }
   hideErr('blastErr');
   clearTimeout(_blastTimer);
+  clearInterval(_cdTimer);
   _blastRID = null;
 
   const btn = document.getElementById('blastBtn');
@@ -1551,20 +1629,22 @@ async function runBlast() {
     _blastRID = d.rid;
     const waitSec = Math.max(d.wait || 20, 15);
     btn.textContent = 'Waiting for NCBI…';
+    const dbNote = db==='nr' ? ' (nr is the largest database — this can take a few minutes)' : '';
     el.innerHTML = blastWaiting(
       'BLAST job submitted! RID: ' + d.rid,
-      'Searching ' + db + ' against billions of sequences…',
+      'Searching ' + db + ' against ' + (db==='nr'?'every known sequence':'a curated sequence set') + dbNote + '…',
       waitSec
     );
     // Countdown then first poll
+    clearInterval(_cdTimer);
     let cd = waitSec;
-    const cdTimer = setInterval(() => {
+    _cdTimer = setInterval(() => {
       cd--;
       const ce = document.querySelector('[data-countdown]');
       if (ce) ce.textContent = 'First check in ' + Math.max(cd,0) + 's…';
-      if (cd <= 0) clearInterval(cdTimer);
+      if (cd <= 0) clearInterval(_cdTimer);
     }, 1000);
-    _blastTimer = setTimeout(() => { clearInterval(cdTimer); pollBlast(el, btn, 0); }, waitSec * 1000);
+    _blastTimer = setTimeout(() => { clearInterval(_cdTimer); pollBlast(el, btn, 0); }, waitSec * 1000);
   } catch(e) {
     el.innerHTML = '';
     showErr('blastErr', e.message);
@@ -1584,16 +1664,21 @@ function blastWaiting(title, sub, wait) {
 
 async function pollBlast(el, btn, attempt) {
   if (!_blastRID) return;
-  if (attempt >= 40) {
+  const maxAttempts = _blastDb === 'nr' ? 75 : 45;  // nr can genuinely take 10 min; other DBs shouldn't need that long
+  if (attempt >= maxAttempts) {
     el.innerHTML = '';
-    showErr('blastErr', 'BLAST timed out (~5 min). Try a shorter sequence (< 200 bp) or check blast.ncbi.nlm.nih.gov manually.');
+    const suggestion = _blastDb === 'nr'
+      ? 'nr searches can occasionally exceed this during NCBI peak load. Try again, or switch to RefSeq Protein / SwissProt for a much faster search.'
+      : 'Try a shorter sequence (< 200 bp) or check blast.ncbi.nlm.nih.gov manually.';
+    showErr('blastErr', 'BLAST timed out after ~' + Math.round(maxAttempts*8/60) + ' min. ' + suggestion);
     btn.disabled = false; btn.textContent = '🔍  Submit to NCBI BLAST';
     return;
   }
   const elapsed = attempt * 8;
+  const slowNote = (_blastDb === 'nr' && elapsed > 120) ? ' — nr searches routinely take a few minutes, still working' : '';
   el.innerHTML = blastWaiting(
     'BLAST running — RID: ' + _blastRID,
-    'Searching NCBI… ' + elapsed + 's elapsed · poll ' + (attempt+1) + '/40', 0
+    'Searching NCBI… ' + elapsed + 's elapsed · poll ' + (attempt+1) + '/' + maxAttempts + slowNote, 0
   );
   try {
     const res = await fetch('/blast_poll', {
@@ -1987,102 +2072,123 @@ function renderRamachandran(points, panel) {
     panel.innerHTML = '<div style="padding:10px;font-size:0.62rem;color:var(--text3)">No backbone atoms found.</div>';
     return;
   }
-  var W = 320, H = 320, M = 36;
+  var W = 420, H = 420, M = 44;
   var plotW = W - M*2, plotH = H - M*2;
-
-  // Count secondary structure regions (approx)
-  var helix=0, sheet=0, other=0;
-  points.forEach(function(p) {
-    var phi=p.phi, psi=p.psi;
-    if (phi>=-160&&phi<=-40&&psi>=-70&&psi<=-10) helix++;
-    else if ((phi>=-170&&phi<=-50)&&(psi>=80&&psi<=180||psi>=-180&&psi<=-150)) sheet++;
-    else other++;
-  });
-
-  // SVG Ramachandran plot
-  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:360px;display:block;margin:0 auto">';
-
-  // Background
-  svg += '<rect width="'+W+'" height="'+H+'" fill="#020810"/>';
-
-  // Allowed regions (approximate, shaded)
   function toX(phi){ return M + (phi+180)/360*plotW; }
   function toY(psi){ return M + (180-psi)/360*plotH; }
 
-  // Alpha-helix region
-  // Alpha-helix favored: phi -160 to -40, psi -70 to -10
-  svg += '<rect x="'+toX(-160).toFixed(1)+'" y="'+toY(-10).toFixed(1)+'"'
-       + ' width="'+((120/360)*plotW).toFixed(1)+'"'
-       + ' height="'+((60/360)*plotH).toFixed(1)+'"'
-       + ' fill="rgba(34,211,238,0.10)" rx="4"/>';
-  // Alpha-helix allowed: phi -160 to -40, psi -70 to 50 (broader)
-  svg += '<rect x="'+toX(-160).toFixed(1)+'" y="'+toY(50).toFixed(1)+'"'
-       + ' width="'+((120/360)*plotW).toFixed(1)+'"'
-       + ' height="'+((120/360)*plotH).toFixed(1)+'"'
-       + ' fill="rgba(34,211,238,0.04)" rx="4"/>';
-  // Beta-sheet region
-  svg += '<rect x="'+toX(-170)+'" y="'+toY(180)+'" width="'+((120/360)*plotW)+'" height="'+((60/360)*plotH)+'" fill="rgba(52,211,153,0.08)" rx="4"/>';
-  svg += '<rect x="'+toX(-170)+'" y="'+toY(-150)+'" width="'+((120/360)*plotW)+'" height="'+((70/360)*plotH)+'" fill="rgba(52,211,153,0.08)" rx="4"/>';
-
-  // Grid lines
-  for (var v=-180;v<=180;v+=60) {
-    var x=toX(v), y=toY(v);
-    svg += '<line x1="'+x+'" y1="'+M+'" x2="'+x+'" y2="'+(M+plotH)+'" stroke="#1a2a38" stroke-width="0.8"/>';
-    svg += '<line x1="'+M+'" y1="'+y+'" x2="'+(M+plotW)+'" y2="'+y+'" stroke="#1a2a38" stroke-width="0.8"/>';
+  // Elliptical approximations of the real favored/allowed backbone conformation
+  // regions (based on statistical analysis of high-resolution crystal structures,
+  // as used by structure-validation tools like MolProbity/RAMPAGE).
+  var REGIONS = [
+    {name:'alpha', tier:'favored', cx:-63,  cy:-43,  rx:32, ry:24, color:'34,211,238'},
+    {name:'alpha', tier:'allowed', cx:-63,  cy:-43,  rx:50, ry:42, color:'34,211,238'},
+    {name:'beta',  tier:'favored', cx:-115, cy:128,  rx:38, ry:42, color:'52,211,153'},
+    {name:'beta',  tier:'allowed', cx:-115, cy:133,  rx:62, ry:58, color:'52,211,153'},
+    {name:'left',  tier:'favored', cx:55,   cy:40,   rx:20, ry:20, color:'240,180,41'},
+    {name:'left',  tier:'allowed', cx:55,   cy:40,   rx:30, ry:30, color:'240,180,41'},
+  ];
+  function inEllipse(phi,psi,cx,cy,rx,ry){ return Math.pow((phi-cx)/rx,2)+Math.pow((psi-cy)/ry,2)<=1; }
+  function classify(phi,psi,aa){
+    var scale = (aa==='G') ? 1.5 : 1.0; // glycine has a much larger accessible conformational space
+    for (var i=0;i<REGIONS.length;i++){ var r=REGIONS[i]; if(r.tier==='favored' && inEllipse(phi,psi,r.cx,r.cy,r.rx*scale,r.ry*scale)) return 'favored'; }
+    for (var i=0;i<REGIONS.length;i++){ var r=REGIONS[i]; if(r.tier==='allowed' && inEllipse(phi,psi,r.cx,r.cy,r.rx*scale,r.ry*scale)) return 'allowed'; }
+    return 'outlier';
   }
-  // Axes
-  svg += '<line x1="'+toX(0)+'" y1="'+M+'" x2="'+toX(0)+'" y2="'+(M+plotH)+'" stroke="#2a3a4a" stroke-width="1"/>';
-  svg += '<line x1="'+M+'" y1="'+toY(0)+'" x2="'+(M+plotW)+'" y2="'+toY(0)+'" stroke="#2a3a4a" stroke-width="1"/>';
+
+  var counts = {favored:0, allowed:0, outlier:0};
+  points.forEach(function(p){ counts[classify(p.phi,p.psi,p.aa)]++; });
+  var total = points.length;
+
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:420px;display:block;margin:0 auto">';
+  svg += '<rect width="'+W+'" height="'+H+'" fill="#020810"/>';
+
+  // Draw allowed (outer, lighter) regions first, then favored (inner, denser) on top
+  ['allowed','favored'].forEach(function(tier){
+    REGIONS.filter(function(r){return r.tier===tier;}).forEach(function(r){
+      var opacity = tier==='favored' ? 0.16 : 0.07;
+      var strokeOp = tier==='favored' ? 0.35 : 0.15;
+      var ex = (r.rx/360)*plotW, ey = (r.ry/360)*plotH;
+      svg += '<ellipse cx="'+toX(r.cx).toFixed(1)+'" cy="'+toY(r.cy).toFixed(1)+'" rx="'+ex.toFixed(1)+'" ry="'+ey.toFixed(1)+'" '
+           + 'fill="rgba('+r.color+','+opacity+')" stroke="rgba('+r.color+','+strokeOp+')" stroke-width="1"/>';
+    });
+  });
+
+  // Grid lines every 30°, heavier at 0/±90/±180
+  for (var v=-180; v<=180; v+=30) {
+    var x=toX(v), y=toY(v);
+    var major = (v%90===0);
+    var col = major ? '#26394a' : '#151f2a';
+    svg += '<line x1="'+x.toFixed(1)+'" y1="'+M+'" x2="'+x.toFixed(1)+'" y2="'+(M+plotH)+'" stroke="'+col+'" stroke-width="'+(major?1:0.6)+'"/>';
+    svg += '<line x1="'+M+'" y1="'+y.toFixed(1)+'" x2="'+(M+plotW)+'" y2="'+y.toFixed(1)+'" stroke="'+col+'" stroke-width="'+(major?1:0.6)+'"/>';
+  }
 
   // Region labels
-  svg += '<text x="'+toX(-100).toFixed(1)+'" y="'+toY(-35).toFixed(1)+'" fill="rgba(34,211,238,0.7)" font-size="8" font-family="monospace" text-anchor="middle">α-helix</text>';
-  svg += '<text x="'+toX(-100).toFixed(1)+'" y="'+toY(140).toFixed(1)+'" fill="rgba(52,211,153,0.7)" font-size="8" font-family="monospace" text-anchor="middle">β-sheet</text>';
+  svg += '<text x="'+toX(-63).toFixed(1)+'" y="'+toY(-43).toFixed(1)+'" fill="rgba(34,211,238,0.55)" font-size="9" font-family="monospace" text-anchor="middle" dy="-30">α-helix</text>';
+  svg += '<text x="'+toX(-115).toFixed(1)+'" y="'+toY(133).toFixed(1)+'" fill="rgba(52,211,153,0.55)" font-size="9" font-family="monospace" text-anchor="middle">β-sheet</text>';
+  svg += '<text x="'+toX(55).toFixed(1)+'" y="'+toY(40).toFixed(1)+'" fill="rgba(240,180,41,0.55)" font-size="7.5" font-family="monospace" text-anchor="middle" dy="-24">L-helix</text>';
 
-  // Data points
-  var COLORS = {
-    'G':'#f59e0b','P':'#a78bfa','A':'#34d399',
-    'default_helix':'#22d3ee','default_sheet':'#34d399','default_other':'rgba(240,180,41,0.6)'
-  };
+  // Data points, colored by classification tier (with Gly/Pro called out distinctly)
+  var TIER_COLOR = {favored:'#22d3ee', allowed:'#f0b429', outlier:'#f87171'};
   points.forEach(function(p) {
     var x = toX(p.phi), y = toY(p.psi);
-    var col;
-    if (p.aa==='G') col='#f59e0b';
-    else if (p.aa==='P') col='#a78bfa';
-    else {
-      var phi=p.phi, psi=p.psi;
-      if (phi>=-160&&phi<=-40&&psi>=-70&&psi<=-10) col='rgba(34,211,238,0.85)';
-      else if ((phi>=-170&&phi<=-50)&&(psi>=90||psi<=-130)) col='rgba(52,211,153,0.85)';
-      else col='rgba(248,113,113,0.65)';
-    }
-    svg += '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="2.2" fill="'+col+'" opacity="0.85"/>';
+    var tier = classify(p.phi, p.psi, p.aa);
+    var col = (p.aa==='G') ? '#facc15' : (p.aa==='P') ? '#c084fc' : TIER_COLOR[tier];
+    var r = tier==='outlier' ? 3.2 : 2.6;
+    svg += '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="'+r+'" fill="'+col+'" '
+         + 'stroke="#020810" stroke-width="0.6" opacity="0.92">'
+         + '<title>Residue '+p.res+' ('+(p.aa3||p.aa)+')\nφ='+p.phi+'°  ψ='+p.psi+'°\n'+tier+'</title></circle>';
   });
 
-  // Border
   svg += '<rect x="'+M+'" y="'+M+'" width="'+plotW+'" height="'+plotH+'" fill="none" stroke="#2a3a4a" stroke-width="1"/>';
-
-  // Axis labels
-  svg += '<text x="'+(W/2)+'" y="'+(H-4)+'" fill="#4a6a8a" font-size="9" font-family="monospace" text-anchor="middle">φ (phi)</text>';
-  svg += '<text x="10" y="'+(H/2)+'" fill="#4a6a8a" font-size="9" font-family="monospace" text-anchor="middle" transform="rotate(-90,10,'+(H/2)+')">ψ (psi)</text>';
-
-  // Tick labels
-  [-180,-120,-60,0,60,120,180].forEach(function(v){
-    svg += '<text x="'+toX(v)+'" y="'+(M-4)+'" fill="#3a5a7a" font-size="7" font-family="monospace" text-anchor="middle">'+v+'</text>';
-    svg += '<text x="'+(M-4)+'" y="'+(toY(v)+3)+'" fill="#3a5a7a" font-size="7" font-family="monospace" text-anchor="end">'+v+'</text>';
+  svg += '<text x="'+(W/2)+'" y="'+(H-6)+'" fill="#5a7a9a" font-size="10" font-family="monospace" text-anchor="middle">φ (phi)</text>';
+  svg += '<text x="12" y="'+(H/2)+'" fill="#5a7a9a" font-size="10" font-family="monospace" text-anchor="middle" transform="rotate(-90,12,'+(H/2)+')">ψ (psi)</text>';
+  [-180,-90,0,90,180].forEach(function(v){
+    svg += '<text x="'+toX(v).toFixed(1)+'" y="'+(M-8)+'" fill="#3a5a7a" font-size="8" font-family="monospace" text-anchor="middle">'+v+'</text>';
+    svg += '<text x="'+(M-6)+'" y="'+(toY(v)+3).toFixed(1)+'" fill="#3a5a7a" font-size="8" font-family="monospace" text-anchor="end">'+v+'</text>';
   });
-
   svg += '</svg>';
 
-  var total = points.length;
+  var favPct = (counts.favored/total*100).toFixed(1);
+  var allPct = (counts.allowed/total*100).toFixed(1);
+  var outPct = (counts.outlier/total*100).toFixed(1);
+
   panel.innerHTML =
-    '<div class="rama-title">📐 Ramachandran Plot — '+total+' residues</div>' +
-    svg +
-    '<div class="rama-legend" style="margin-top:8px;font-size:0.58rem;color:var(--text3);font-family:\'IBM Plex Mono\',monospace;display:flex;flex-wrap:wrap;gap:8px">' +
-      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#22d3ee"/></svg> α-helix ('+helix+', '+Math.round(helix/total*100)+'%)</span>' +
-      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#34d399"/></svg> β-sheet ('+sheet+', '+Math.round(sheet/total*100)+'%)</span>' +
-      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#f87171"/></svg> Other ('+other+', '+Math.round(other/total*100)+'%)</span>' +
-      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#f59e0b"/></svg> Gly (G)</span>' +
-      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#a78bfa"/></svg> Pro (P)</span>' +
-    '</div>';
+    '<div class="rama-title">📐 Ramachandran Plot — '+total+' residues</div>'+
+    svg+
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;max-width:420px;margin-left:auto;margin-right:auto">'+
+      '<div style="text-align:center;padding:8px;background:rgba(34,211,238,0.06);border:1px solid rgba(34,211,238,0.2);border-radius:7px">'+
+        '<div style="font-size:1.1rem;font-weight:700;color:var(--cyan)">'+favPct+'%</div>'+
+        '<div style="font-size:0.55rem;color:var(--text3);font-family:\'IBM Plex Mono\'">FAVORED</div></div>'+
+      '<div style="text-align:center;padding:8px;background:rgba(240,180,41,0.06);border:1px solid rgba(240,180,41,0.2);border-radius:7px">'+
+        '<div style="font-size:1.1rem;font-weight:700;color:var(--amber)">'+allPct+'%</div>'+
+        '<div style="font-size:0.55rem;color:var(--text3);font-family:\'IBM Plex Mono\'">ALLOWED</div></div>'+
+      '<div style="text-align:center;padding:8px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:7px">'+
+        '<div style="font-size:1.1rem;font-weight:700;color:var(--red)">'+outPct+'%</div>'+
+        '<div style="font-size:0.55rem;color:var(--text3);font-family:\'IBM Plex Mono\'">OUTLIER</div></div>'+
+    '</div>'+
+    '<div class="rama-legend" style="margin-top:10px;font-size:0.58rem;color:var(--text3);font-family:\'IBM Plex Mono\',monospace;display:flex;flex-wrap:wrap;gap:10px;justify-content:center">'+
+      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#22d3ee"/></svg> Favored region</span>'+
+      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#f0b429"/></svg> Allowed region</span>'+
+      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#f87171"/></svg> Outlier</span>'+
+      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#facc15"/></svg> Gly (expanded space)</span>'+
+      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#c084fc"/></svg> Pro</span>'+
+    '</div>'+
+    '<div style="margin-top:8px;font-size:0.58rem;color:var(--text3);text-align:center">Hover a point for residue detail. '+
+    (parseFloat(outPct)>10 ? '<span style="color:var(--red)">High outlier fraction — check structure quality.</span>' : 'Good backbone geometry overall.')+'</div>'+
+    '<div style="margin-top:14px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;font-size:0.68rem;color:var(--text2);line-height:1.75">'+
+      '<b style="color:var(--amber)">What this shows:</b> Each dot is one amino acid, plotted by its two backbone twist angles — '+
+      '<b style="color:var(--cyan)">φ (phi)</b>, the rotation around the N–Cα bond, and <b style="color:var(--cyan)">ψ (psi)</b>, the rotation around the Cα–C bond. '+
+      'These two angles alone define how the protein backbone folds at that position — everything else (side chains, bond lengths) is fairly fixed by chemistry.<br><br>'+
+      '<b style="color:var(--amber)">Why the regions matter:</b> Not every φ/ψ combination is physically possible — many would force atoms to overlap. '+
+      'The shaded regions mark angle combinations that are sterically allowed and match what\'s actually observed in thousands of solved protein structures: '+
+      'the <b style="color:#22d3ee">α-helix</b> cluster (tight right-handed coil), the <b style="color:#34d399">β-sheet</b> cluster (extended, zig-zag strands), '+
+      'and a small, rare <b style="color:#f0b429">left-handed helix</b> region mostly used by Glycine, which — lacking a side chain — can reach angle combinations no other residue can.<br><br>'+
+      '<b style="color:var(--amber)">Reading the quality summary:</b> <b style="color:var(--cyan)">Favored</b> = ideal, low-strain backbone geometry. '+
+      '<b style="color:var(--amber)">Allowed</b> = still physically reasonable, just less common. '+
+      '<b style="color:var(--red)">Outlier</b> = strained or unusual geometry — sometimes a real flexible loop or active-site distortion, but often a sign of a lower-resolution structure or a modeling/prediction error. '+
+      'Well-determined experimental structures typically land <b>&gt;90% favored</b>; this exact favored/allowed/outlier split is the same check structural biologists run (via tools like MolProbity) to validate a structure before trusting it.'+
+      '</div>';
 }
 
 // ── PHYLOGENETIC TREE ─────────────────────────────────────────────────────────
