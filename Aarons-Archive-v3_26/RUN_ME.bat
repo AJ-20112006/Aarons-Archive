@@ -14,8 +14,8 @@ echo  Installing dependencies...
 pip install flask waitress --quiet 2>nul
 echo.
 echo  Starting production server...
-echo  Open browser at: http://localhost:8080
+echo  Open browser at: http://localhost:4040
 echo  Press Ctrl+C to stop.
 echo.
-python -c "from waitress import serve; from app import app; serve(app, host='0.0.0.0', port=8080, threads=4)"
+python -c "from waitress import serve; from app import app; serve(app, host='0.0.0.0', port=4040, threads=4)"
 pause

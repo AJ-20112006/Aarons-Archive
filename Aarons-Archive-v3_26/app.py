@@ -52,7 +52,12 @@ _RATE_LIMITS = {  # route_prefix: (max_requests, window_seconds)
 }
 
 def _client_ip():
-    # Railway/Render sit behind a proxy — trust X-Forwarded-For if present
+    # Vercel/Railway/Render all overwrite X-Forwarded-For at their edge and do
+    # not forward client-supplied values, specifically to prevent IP spoofing —
+    # so trusting the first value here is safe on those platforms. This
+    # assumption does NOT hold if this app is ever deployed directly on a bare
+    # VPS or behind a proxy that blindly forwards client headers; in that case
+    # a client could inject a fake X-Forwarded-For to bypass rate limiting.
     fwd = request.headers.get('X-Forwarded-For', '')
     return fwd.split(',')[0].strip() if fwd else (request.remote_addr or 'unknown')
 
@@ -74,6 +79,15 @@ def _rate_limited(path):
 def _check_rate_limit():
     if _rate_limited(request.path):
         return jsonify({'error': 'Too many requests — please slow down and try again in a minute.'}), 429
+
+def _body():
+    """Safely extract the JSON request body as a dict, no matter what the
+    client sends — malformed JSON, a JSON `null`, an empty body, or a JSON
+    array/string instead of an object. Every route calls this instead of
+    touching request.json directly, so a malformed request always gets a
+    clean 400 from the route's own validation instead of an unhandled 500."""
+    d = request.get_json(silent=True)
+    return d if isinstance(d, dict) else {}
 
 # ═══════════════════════════════════════════════
 # CONSTANTS
@@ -99,11 +113,11 @@ RESTRICTION_ENZYMES = {
     'HindIII':('AAGCTT',1,'Cloning, common'),'SalI':('GTCGAC',1,'Cloning'),
     'XhoI':('CTCGAG',1,'Cloning'),'NcoI':('CCATGG',1,'Expression vectors'),
     'NdeI':('CATATG',2,'Expression vectors'),'XbaI':('TCTAGA',1,'Cloning'),
-    'SpeI':('ACTAGT',1,'Cloning'),'PstI':('CTGCAG',4,'Cloning'),
+    'SpeI':('ACTAGT',1,'Cloning'),'PstI':('CTGCAG',5,'Cloning'),
     'KpnI':('GGTACC',5,'Cloning'),'SacI':('GAGCTC',5,'Cloning'),
     'SmaI':('CCCGGG',3,'Blunt end'),'EcoRV':('GATATC',3,'Blunt end'),
     'ClaI':('ATCGAT',2,'Cloning'),'NotI':('GCGGCCGC',2,'8-cutter, rare'),
-    'PacI':('TTAATTAA',3,'8-cutter, rare'),'AscI':('GGCGCGCC',2,'8-cutter, rare'),
+    'PacI':('TTAATTAA',5,'8-cutter, rare'),'AscI':('GGCGCGCC',2,'8-cutter, rare'),
     'FseI':('GGCCGGCC',6,'8-cutter, rare'),'AluI':('AGCT',2,'Frequent cutter'),
     'HaeIII':('GGCC',2,'Frequent cutter'),'MboI':('GATC',0,'Frequent cutter'),
     'TaqI':('TCGA',1,'Thermostable'),'MspI':('CCGG',1,'CpG analysis'),
@@ -111,7 +125,7 @@ RESTRICTION_ENZYMES = {
     'PvuII':('CAGCTG',3,'Blunt end'),'ScaI':('AGTACT',3,'Blunt end'),
     'NheI':('GCTAGC',1,'Cloning'),'MluI':('ACGCGT',1,'Cloning'),
     'BglII':('AGATCT',1,'BamHI-compatible'),'SphI':('GCATGC',5,'Cloning'),
-    'ApaI':('GGGCCC',5,'Cloning'),'NsiI':('ATGCAT',4,'Cloning'),
+    'ApaI':('GGGCCC',5,'Cloning'),'NsiI':('ATGCAT',5,'Cloning'),
     'StuI':('AGGCCT',3,'Blunt end'),'SspI':('AATATT',3,'AT-rich'),
 }
 AA_MW = {'A':89.09,'R':174.20,'N':132.12,'D':133.10,'C':121.16,'E':147.13,'Q':146.15,
@@ -273,22 +287,40 @@ def melting_temp(s):
     nn=round((dH/(dS+R*math.log(ct/4)))-273.15,1) if dS else 0
     return {'wallace':round(w,1),'nearest_neighbor':nn}
 
-def gc_window(s,window=100):
+def _adaptive_window(n, base=100, floor=20, target_points=18):
+    # A fixed 100bp window leaves short sequences (mRNAs, small ORFs, etc.)
+    # with only 0-2 sliding-window positions — too few for Chart.js to draw
+    # a line at all. But shrinking the window too far the other direction
+    # is just as broken: with only a handful of bases per window, G/C (or
+    # A/T) counts saturate to the same value constantly by chance, so the
+    # skew ratio pins at exactly ±1 for long stretches — a jagged square
+    # wave instead of a real curve. Keep windows at least `floor` bases so
+    # the ratio stays statistically meaningful, and only shrink below the
+    # full 100bp when the sequence itself is short.
+    if n <= base * 1.5:
+        w = max(floor, n // target_points)
+        return min(w, n) if n else floor
+    return base
+
+def gc_window(s,window=None):
+    window = window or _adaptive_window(len(s))
     step=max(1,window//2)
     return [{'pos':i+window//2,'gc':round((s[i:i+window].count('G')+s[i:i+window].count('C'))/window*100,1)}
             for i in range(0,len(s)-window+1,step)]
 
-def gc_skew_window(s,window=100):
+def gc_skew_window(s,window=None):
+    window = window or _adaptive_window(len(s))
     step=max(1,window//2); res=[]
     for i in range(0,len(s)-window+1,step):
         w=s[i:i+window]; g,c=w.count('G'),w.count('C')
         res.append({'pos':i+window//2,'skew':round((g-c)/(g+c),3) if (g+c) else 0})
     return res
 
-def at_skew_window(s,window=100):
+def at_skew_window(s,window=None):
+    window = window or _adaptive_window(len(s))
     step=max(1,window//2); res=[]
     for i in range(0,len(s)-window+1,step):
-        w=s[i:i+window]; a,t=w.count('A'),w.count('T')
+        w=s[i:i+window]; a,t=w.count('A'),(w.count('T')+w.count('U'))
         res.append({'pos':i+window//2,'skew':round((a-t)/(a+t),3) if (a+t) else 0})
     return res
 
@@ -537,12 +569,18 @@ def aa_composition(s):
             for a in 'ACDEFGHIKLMNPQRSTVWY'}
 
 def secondary_structure_propensity(s):
-    helix={'A':1.45,'L':1.34,'M':1.20,'E':1.53,'Q':1.17,'H':1.00,'K':1.07,'R':0.79,
-           'V':0.90,'I':1.00,'C':0.77,'Y':0.61,'F':1.12,'W':1.08,'T':0.82,'S':0.79,
-           'D':0.98,'N':0.73,'G':0.53,'P':0.20}
-    sheet={'V':1.91,'I':1.60,'C':1.17,'Y':1.47,'F':1.28,'W':1.19,'L':1.22,'T':1.20,
-           'M':1.67,'A':0.97,'R':0.90,'G':0.81,'D':0.80,'K':0.74,'S':0.72,'H':0.87,
-           'N':0.65,'P':0.62,'E':0.26,'Q':1.23}
+    # Chou-Fasman (1978) conformational parameters. Verified against two
+    # independent authoritative sources (Voet & Voet "Biochemistry" textbook
+    # and Rockefeller University's prowl reference) after the previous table
+    # was found to have significant transcription errors in several residues
+    # (e.g. Met sheet propensity was 1.67 here vs the correct 1.05; Pro helix
+    # propensity was 0.20 vs the correct 0.57).
+    helix={'A':1.42,'L':1.21,'M':1.45,'E':1.51,'Q':1.11,'H':1.00,'K':1.16,'R':0.98,
+           'V':1.06,'I':1.08,'C':0.70,'Y':0.69,'F':1.13,'W':1.08,'T':0.83,'S':0.77,
+           'D':1.01,'N':0.67,'G':0.57,'P':0.57}
+    sheet={'V':1.70,'I':1.60,'C':1.19,'Y':1.47,'F':1.38,'W':1.37,'L':1.30,'T':1.19,
+           'M':1.05,'A':0.83,'R':0.93,'G':0.75,'D':0.54,'K':0.74,'S':0.75,'H':0.87,
+           'N':0.89,'P':0.55,'E':0.37,'Q':1.10}
     h=round(sum(helix.get(a,1.0) for a in s)/len(s),3) if s else 0
     sh=round(sum(sheet.get(a,1.0) for a in s)/len(s),3) if s else 0
     return {'helix_score':h,'sheet_score':sh,'likely':'α-Helix dominant' if h>sh else 'β-Sheet dominant'}
@@ -811,12 +849,60 @@ def blast_submit(seq, program='blastn', database='nt'):
         # Show first 400 chars for debugging
         preview = re.sub(r'<[^>]+>','',raw).strip()[:400]
         raise ValueError(f'NCBI returned no RID. Response: {preview}')
-    return {'rid':rid.group(1), 'wait':int(rtoe.group(1)) if rtoe else 30}
+    # NCBI's RTOE is only an estimate, and it can occasionally come back
+    # unusually large (seen: 451s) — most likely for unusual param
+    # combinations, but there's no reason to sit and wait that long before
+    # even the FIRST status check when most searches finish well under a
+    # minute regardless. Cap it; the normal 8s polling loop takes over
+    # after this first check either way, so nothing is lost by checking
+    # sooner than NCBI's conservative suggestion.
+    wait_raw = int(rtoe.group(1)) if rtoe else 30
+    return {'rid':rid.group(1), 'wait':min(wait_raw, 60)}
 
 def _txt(el, tag, default=''):
     """Safe XML element text extractor."""
     e = el.find(tag)
     return e.text.strip() if e is not None and e.text else default
+
+_GENE_STOPWORDS = {'PROTEIN','ISOFORM','VARIANT','PRECURSOR','PARTIAL','UNCHARACTERIZED','PUTATIVE',
+    'HYPOTHETICAL','LIKE','TYPE','FAMILY','MEMBER','SUBUNIT','COMPLEX','DOMAIN',
+    'CONTAINING','RECEPTOR','FACTOR','HOMOLOG','HOMO','SAPIENS','MUS','MUSCULUS',
+    'RATTUS','NORVEGICUS','PREDICTED','LOW','QUALITY','CHAIN','SUSCEPTIBILITY',
+    'ANTIGEN','CELLULAR','TUMOR','BREAST','CANCER'}
+_GENE_NAME_HINTS = [
+    (re.compile(r'\bbreast cancer type 1\b', re.I), 'BRCA1'),
+    (re.compile(r'\bbreast cancer type 2\b', re.I), 'BRCA2'),
+    (re.compile(r'\bcellular tumor antigen p53\b', re.I), 'TP53'),
+    (re.compile(r'\btumor protein p53\b', re.I), 'TP53'),
+    (re.compile(r'\bepidermal growth factor receptor\b', re.I), 'EGFR'),
+    (re.compile(r'\binsulin\b', re.I), 'INS'),
+]
+def _extract_gene_name(hit_def):
+    """Best-effort gene symbol extraction from a BLAST hit definition line,
+    for feeding the 'View 3D Structure' lookup. The original implementation
+    only checked for a parenthesized symbol like "...(TP53)...", a format
+    UniProt/SwissProt sometimes uses — but RefSeq (the default, recommended
+    database) formats hit titles as "<description> [<organism>]" with no
+    parentheses at all, e.g. "GTPase HRas [Homo sapiens]". That pattern
+    never matched, so gene_name was silently empty for essentially every
+    RefSeq hit and the 3D structure button never appeared. This tries,
+    in order: SwissProt's GN= field, the legacy parenthesized form, a small
+    set of well-known descriptive-name → symbol hints, then finally the
+    word immediately preceding the organism bracket (handling "-like"
+    suffixes), filtered against common non-gene description words.
+    """
+    m = re.search(r'\bGN=([A-Za-z0-9\-]{2,15})\b', hit_def)
+    if m: return m.group(1).upper()
+    m = re.search(r'\(([A-Z][A-Z0-9]{1,9})\)', hit_def)
+    if m: return m.group(1).upper()
+    for pat, sym in _GENE_NAME_HINTS:
+        if pat.search(hit_def): return sym
+    m = re.search(r'([A-Za-z][A-Za-z0-9]{1,9})(?:-like)?\s*\[', hit_def)
+    if m:
+        candidate = m.group(1).upper()
+        if candidate not in _GENE_STOPWORDS and not candidate.isdigit():
+            return candidate
+    return ''
 
 def _parse_blast_xml(xml_text, query_len_fallback=1):
     """Parse NCBI BLAST XML format into hits list.
@@ -848,11 +934,11 @@ def _parse_blast_xml(xml_text, query_len_fallback=1):
                 evalue_str = '0.0' if ev == 0 else (f'{ev:.2e}' if ev < 0.001 else f'{ev:.4f}')
             except:
                 evalue_str = evalue
-            gene_match = re.search(r'\(([A-Z][A-Z0-9]{1,9})\)', hit_def)
+            gene_match = _extract_gene_name(hit_def)
             hits.append({
                 'accession': accession,
                 'title':     hit_def[:120],
-                'gene_name': gene_match.group(1) if gene_match else '',
+                'gene_name': gene_match,
                 'organism':  '',
                 'taxid':     '',
                 'score':     int(_txt(hsp, 'Hsp_score', '0')),
@@ -870,50 +956,54 @@ def _parse_blast_xml(xml_text, query_len_fallback=1):
 
 def blast_poll(rid):
     """Poll NCBI BLAST using XML format.
-    XML is always plain text — never zipped, never has trailing HTML issues.
-    Far more stable than JSON2 which NCBI keeps changing (trailing HTML → ZIP format).
+
+    Previous versions gated the XML fetch behind a separate SearchInfo
+    request, treating the search as "not ready" unless the literal
+    substring "Status=READY" appeared in that response. That's brittle: if
+    NCBI's status line ever differs by whitespace, casing, or format for a
+    given request type, this would report WAITING forever -- indistinguishable
+    from a genuinely slow search -- right up until our own timeout kills it.
+    That's consistent with what's been observed: searches "timing out" at
+    exactly our configured ceiling regardless of how fast NCBI actually
+    finished. Removed that intermediate guess entirely. Every poll now goes
+    straight for the real XML results, and "done" is decided the only way
+    that can't be wrong: whether <BlastOutput> -- the actual results -- is
+    present. If it isn't yet, we're still waiting, full stop, no format
+    parsing involved.
     """
     url = 'https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi'
+    _headers = {'User-Agent':'Mozilla/5.0 (compatible; AaronsArchive/3.2)','Accept':'text/html,application/xml'}
 
-    # ── Phase 1: status check (SearchInfo, tiny & fast) ─────────────────────
     try:
-        with _safe_fetch(
-                url + '?' + urllib.parse.urlencode(
-                    {'CMD':'Get','FORMAT_TYPE':'HTML','RID':rid,'FORMAT_OBJECT':'SearchInfo'}),
-                timeout=30) as r:
-            status_raw = r.read().decode('utf-8','ignore')
+        req = urllib.request.Request(
+            url + '?' + urllib.parse.urlencode({
+                'CMD':'Get', 'FORMAT_TYPE':'XML', 'RID':rid,
+                'FORMAT_OBJECT':'Alignment', 'HITLIST_SIZE':'20'
+            }), headers=_headers)
+        with _safe_fetch(req, timeout=60) as r:
+            xml_raw = r.read().decode('utf-8','ignore')
     except urllib.error.HTTPError as e:
         return {'status':'FAILED','error':f'NCBI HTTP error {e.code}. Try again.'}
     except Exception as e:
         return {'status':'FAILED','error':f'Network error: {str(e)[:120]}'}
 
-    if 'Status=WAITING' in status_raw: return {'status':'WAITING'}
-    if 'Status=FAILED'  in status_raw: return {'status':'FAILED','error':'NCBI search failed on their servers'}
-    if 'Status=UNKNOWN' in status_raw: return {'status':'UNKNOWN','error':'RID expired — resubmit your sequence'}
+    if '<BlastOutput' in xml_raw:
+        try:
+            hits, query_len = _parse_blast_xml(xml_raw)
+            return {'status':'DONE','hits':hits,'count':len(hits),'query_len':query_len}
+        except Exception as e:
+            return {'status':'FAILED','error':f'XML parse error: {type(e).__name__}: {str(e)[:150]}'}
 
-    # ── Phase 2: fetch XML results (always plain text, never zipped) ─────────
-    try:
-        with _safe_fetch(
-                url + '?' + urllib.parse.urlencode({
-                    'CMD':'Get', 'FORMAT_TYPE':'XML', 'RID':rid,
-                    'FORMAT_OBJECT':'Alignment', 'HITLIST_SIZE':'20'
-                }), timeout=60) as r:
-            xml_raw = r.read().decode('utf-8','ignore')
-    except Exception as e:
-        return {'status':'FAILED','error':f'Failed to fetch results: {str(e)[:120]}'}
-
-    # Sanity check — if NCBI still says waiting (rare edge case)
-    if 'Status=WAITING' in xml_raw:
-        return {'status':'WAITING'}
-
-    if '<BlastOutput' not in xml_raw:
-        return {'status':'FAILED','error':'NCBI did not return XML results. Try resubmitting.'}
-
-    try:
-        hits, query_len = _parse_blast_xml(xml_raw)
-        return {'status':'DONE','hits':hits,'count':len(hits),'query_len':query_len}
-    except Exception as e:
-        return {'status':'FAILED','error':f'XML parse error: {type(e).__name__}: {str(e)[:150]}'}
+    # Not ready yet -- check for a definitive failure/expiry signal using a
+    # tolerant, case-insensitive, whitespace-flexible match (the exact
+    # brittleness that caused this class of bug before). Anything else,
+    # including a status line we don't recognize, safely defaults to still
+    # running rather than guessing either way.
+    if re.search(r'Status\s*=\s*FAILED', xml_raw, re.IGNORECASE):
+        return {'status':'FAILED','error':'NCBI search failed on their servers'}
+    if re.search(r'Status\s*=\s*UNKNOWN', xml_raw, re.IGNORECASE):
+        return {'status':'UNKNOWN','error':'RID expired -- resubmit your sequence'}
+    return {'status':'WAITING','debug':xml_raw[:200]}
 
 
 def structure_search(gene_name, organism_id='9606'):
@@ -1127,42 +1217,315 @@ def run_ai(prompt, key):
 # PDF REPORT
 # ═══════════════════════════════════════════════
 def make_report(data):
-    import datetime; now=datetime.datetime.now().strftime('%Y-%m-%d %H:%M'); t=data.get('type','?')
-    css="""<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#111;background:#fff}.p{max-width:900px;margin:0 auto;padding:32px}
-    h1{font-size:20px;color:#0d3d52;border-bottom:3px solid #00b4d8;padding-bottom:8px;margin-bottom:6px}h2{font-size:13px;color:#023e8a;margin:18px 0 8px;text-transform:uppercase;letter-spacing:1px;border-left:3px solid #00b4d8;padding-left:8px}
-    .m{font-size:10px;color:#666;margin-bottom:18px}.g{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}.t{background:#f0f8ff;border:1px solid #cce4f0;border-radius:5px;padding:10px;text-align:center}
-    .t .v{font-size:16px;font-weight:bold;color:#0077b6}.t .l{font-size:9px;color:#666;text-transform:uppercase;margin-top:2px}table{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:10px}
-    th{background:#0077b6;color:#fff;padding:5px 7px;text-align:left}td{padding:4px 7px;border-bottom:1px solid #e0e0e0}tr:nth-child(even) td{background:#f8fbff}
-    .ai{background:#fff8e1;border:1px solid #ffe082;border-radius:5px;padding:12px;margin-top:10px;font-style:italic;line-height:1.7}
-    .ft{margin-top:28px;padding-top:8px;border-top:1px solid #ddd;font-size:9px;color:#999;text-align:center}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>"""
-    b=f'<div class="p"><h1>\U0001f9ec Aaron\'s Archive - Report</h1><div class="m">Generated: {now} | Type: <b>{t}</b> | Length: <b>{data.get("length",0):,}</b></div>'
+    import datetime, html as _html
+    now = datetime.datetime.now().strftime('%B %d, %Y  ·  %H:%M')
+    t = data.get('type', '?')
+    seq_preview = _html.escape((data.get('sequence_preview','') or data.get('sequence','') or '')[:180])
+
+    css = """<style>
+    @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',Arial,sans-serif;font-size:11px;color:#22303c;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .page{max-width:960px;margin:0 auto;padding:0 0 40px}
+    /* ── Letterhead ── */
+    .hero{padding:30px 40px 20px;border-bottom:2.5px solid #0d3d52}
+    .hero-top{display:flex;align-items:flex-end;justify-content:space-between}
+    .hero-brand{display:flex;align-items:center;gap:12px}
+    .hero-brand .mark{font-size:26px;line-height:1}
+    .hero h1{font-family:'Source Serif 4',serif;font-size:23px;font-weight:600;color:#0d3d52;letter-spacing:0.002em}
+    .hero .tagline{font-family:'Inter',sans-serif;font-size:9.5px;color:#7691a0;letter-spacing:0.08em;
+      text-transform:uppercase;margin-top:2px;font-weight:500}
+    .hero-badge{font-family:'IBM Plex Mono',monospace;font-size:9px;background:#eef6fa;
+      border:1px solid #cfe7f0;color:#0077b6;padding:5px 13px;border-radius:3px;letter-spacing:0.05em;font-weight:600}
+    .hero-meta{display:flex;gap:32px;margin-top:16px;flex-wrap:wrap;border-top:1px solid #e5edf1;padding-top:12px}
+    .hero-meta div{font-family:'Inter',sans-serif;font-size:9px;color:#8398a5;text-transform:uppercase;letter-spacing:0.06em}
+    .hero-meta b{color:#22303c;font-size:12px;display:block;margin-top:3px;font-weight:600;letter-spacing:0;text-transform:none;font-family:'IBM Plex Mono',monospace}
+    .seq-preview{margin-top:14px;background:#f7fafb;border:1px solid #e5edf1;
+      border-radius:5px;padding:9px 12px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c7385;
+      letter-spacing:0.02em;word-break:break-all}
+    /* ── Content ── */
+    .content{padding:0 40px}
+    h2{font-family:'Source Serif 4',serif;font-size:14.5px;color:#0d3d52;margin:28px 0 12px;
+      font-weight:600;letter-spacing:0.001em;display:flex;align-items:center;gap:9px;
+      border-bottom:1px solid #e5edf1;padding-bottom:8px}
+    h2::before{content:'';width:4px;height:14px;background:#00b4d8;border-radius:1px;flex-shrink:0}
+    h2 .cnt{font-family:'Inter',sans-serif;font-weight:600;color:#0077b6;
+      background:#eef6fa;padding:1px 9px;border-radius:9px;font-size:10px;margin-left:auto}
+    .summary{background:#f7fafb;border:1px solid #e5edf1;border-left:3px solid #0d3d52;
+      border-radius:5px;padding:16px 19px;margin:8px 0 22px;line-height:1.9;font-size:10.8px;color:#3a4b57}
+    .summary b{color:#0d3d52;font-weight:600}
+    .summary ul{margin:7px 0 0 16px}
+    .summary li{margin-top:5px}
+    .summary-hd{font-family:'Inter',sans-serif;font-weight:700;color:#0d3d52;font-size:10.5px;
+      text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:3px}
+    .g{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:18px}
+    .t{background:#fff;border:1px solid #e5edf1;border-radius:6px;padding:13px 10px;
+      text-align:center;position:relative}
+    .t::before{content:'';position:absolute;top:0;left:0;right:0;height:2.5px;background:#0d3d52;border-radius:6px 6px 0 0}
+    .t .v{font-size:19px;font-weight:700;color:#0d3d52;font-family:'Source Serif 4',serif}
+    .t .l{font-size:8.5px;color:#8398a5;text-transform:uppercase;letter-spacing:0.06em;margin-top:4px;font-weight:500}
+    .compbar{display:flex;height:26px;border-radius:5px;overflow:hidden;margin:9px 0 5px;border:1px solid #e5edf1}
+    .compbar div{display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;
+      font-size:9px;color:#0a1620;font-weight:700}
+    .complegend{display:flex;gap:18px;font-family:'Inter',sans-serif;font-size:9.5px;color:#5c7385;margin-bottom:18px}
+    .complegend span{display:inline-flex;align-items:center;gap:5px}
+    .complegend i{width:9px;height:9px;border-radius:2px;display:inline-block}
+    table{width:100%;border-collapse:collapse;margin-bottom:18px;font-size:9.9px;
+      border:1px solid #e5edf1;border-radius:6px;overflow:hidden}
+    th{background:#0d3d52;color:#fff;padding:8px 10px;text-align:left;
+      font-family:'Inter',sans-serif;font-size:8.8px;text-transform:uppercase;letter-spacing:0.05em;font-weight:600}
+    td{padding:7px 10px;border-bottom:1px solid #eef3f6;font-family:'IBM Plex Mono',monospace;color:#3a4b57}
+    tr:nth-child(even) td{background:#f9fbfc}
+    tr:last-child td{border-bottom:none}
+    code{background:#eef4f8;color:#0d3d52;padding:1.5px 5px;border-radius:3px;font-size:9.3px;font-family:'IBM Plex Mono',monospace}
+    .ai{background:#fdfbf5;border:1px solid #ecdfb8;border-left:3px solid #c9971c;
+      border-radius:5px;padding:16px 19px;margin-top:8px;line-height:1.9;font-size:10.6px;color:#5c4813}
+    .ai-hd{font-family:'Inter',sans-serif;font-size:9.5px;color:#a17a10;text-transform:uppercase;
+      letter-spacing:0.07em;margin-bottom:8px;font-weight:700}
+    .footer{margin-top:38px;padding:16px 40px;border-top:1px solid #e5edf1;font-size:8.8px;color:#a3b2bb;
+      display:flex;justify-content:space-between;font-family:'Inter',sans-serif}
+    .methods{background:#fafbfc;border:1px solid #eef1f3;border-radius:5px;padding:14px 18px;margin-top:10px;
+      font-size:9px;color:#7d8b95;line-height:1.8}
+    .methods b{color:#5c6b76;font-weight:600}
+    .methods-hd{font-family:'Inter',sans-serif;font-weight:700;color:#5c6b76;font-size:9.5px;
+      text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:6px}
+    .section{page-break-inside:avoid}
+    .toc{display:flex;flex-wrap:wrap;gap:6px 18px;background:#f7fafb;border:1px solid #e5edf1;border-radius:6px;
+      padding:12px 18px;margin:16px 0 4px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c7385}
+    .toc b{color:#0d3d52;font-family:'Inter',sans-serif;text-transform:uppercase;letter-spacing:0.06em;
+      font-size:8.5px;width:100%;margin-bottom:2px;font-weight:700}
+    .toc span{color:#0077b6}
+    .chart-img-box{background:#fff;border:1px solid #e5edf1;border-radius:8px;padding:12px;margin:6px 0 18px;
+      page-break-inside:avoid}
+    .chart-img-box img{width:100%;height:auto;display:block;border-radius:4px}
+    .chart-img-cap{font-family:'Inter',sans-serif;font-size:8.5px;color:#8398a5;margin-top:8px;
+      text-align:center;letter-spacing:0.02em}
+    .chart-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    @page{margin:26px}
+    </style>"""
+
+    def stat_tile(v, l):
+        return f'<div class="t"><div class="v">{v}</div><div class="l">{l}</div></div>'
+
+    def table(headers, rows):
+        h = ''.join(f'<th>{x}</th>' for x in headers)
+        r = ''.join('<tr>' + ''.join(f'<td>{c}</td>' for c in row) + '</tr>' for row in rows)
+        return f'<table><tr>{h}</tr>{r}</table>'
+
+    charts = data.get('charts', {}) or {}
+    def chart_img(chart_id, caption):
+        src = charts.get(chart_id)
+        if not src:
+            return ''
+        return f'<div class="chart-img-box"><img src="{src}" alt="{caption}"><div class="chart-img-cap">{caption}</div></div>'
+
+    b = f'''<div class="page">
+    <div class="hero">
+      <div class="hero-top">
+        <div class="hero-brand"><span class="mark">🧬</span><div><h1>Aaron's Archive</h1><div class="tagline">DNA · RNA · Protein Analysis Report</div></div></div>
+        <div class="hero-badge">{_html.escape(str(t))} SEQUENCE</div>
+      </div>
+      <div class="hero-meta">
+        <div>GENERATED<b>{now}</b></div>
+        <div>LENGTH<b>{data.get("length",0):,} {"aa" if t=="PROTEIN" else "bp"}</b></div>
+        <div>REPORT ID<b>AA-{abs(hash(str(data.get("sequence_preview","") or data.get("sequence",""))[:50])) % 100000:05d}</b></div>
+      </div>
+      {f'<div class="seq-preview">{seq_preview}{"…" if len(data.get("sequence","") or "")>180 else ""}</div>' if seq_preview else ''}
+    </div>
+    <div class="content">'''
+
+    # ── Executive summary (rule-based, no fabricated claims) ──────────────────
+    summary_pts = []
     if t in ('DNA','RNA'):
-        s=data.get('stats',{}); m=data.get('melting',{})
-        b+=f'<h2>Statistics</h2><div class="g"><div class="t"><div class="v">{s.get("length",0):,}</div><div class="l">Length (bp)</div></div><div class="t"><div class="v">{s.get("gc",0)}%</div><div class="l">GC</div></div><div class="t"><div class="v">{m.get("nearest_neighbor",0)}°C</div><div class="l">Tm (NN)</div></div><div class="t"><div class="v">{data.get("mw",0)/1000:.2f} kDa</div><div class="l">MW</div></div></div>'
-        orfs=data.get('orfs',[])
+        s = data.get('stats',{}); m = data.get('melting',{})
+        gc = s.get('gc',0)
+        gc_desc = 'GC-rich' if gc>60 else 'AT-rich' if gc<40 else 'balanced'
+        summary_pts.append(f'This {data.get("length",0):,} bp {t} sequence is <b>{gc_desc}</b> at <b>{gc}% GC</b>, with a nearest-neighbor melting temperature of <b>{m.get("nearest_neighbor","?")}°C</b>.')
+        orfs = data.get('orfs',[])
+        if orfs: summary_pts.append(f'<b>{len(orfs)} open reading frame(s)</b> were identified across all 6 frames, the longest encoding <b>{max((o.get("protein_len",0) for o in orfs), default=0)} aa</b>.')
+        rest = data.get('restriction',[])
+        if rest: summary_pts.append(f'<b>{sum(r.get("count",0) for r in rest)} restriction site(s)</b> found across <b>{len(rest)} enzyme(s)</b> screened.')
+        cpg = data.get('cpg_islands',[])
+        if cpg: summary_pts.append(f'<b>{len(cpg)} CpG island(s)</b> detected — often marking gene-regulatory regions.')
+    elif t == 'PROTEIN':
+        pi = data.get('pi',0); gravy = data.get('gravy',0)
+        charge_desc = 'basic' if pi>7.5 else 'acidic' if pi<5.5 else 'near-neutral'
+        hydro_desc = 'hydrophobic' if gravy>0.4 else 'hydrophilic' if gravy<-0.4 else 'moderately polar'
+        summary_pts.append(f'This <b>{data.get("length",0):,} aa</b> protein has an isoelectric point of <b>pI {pi}</b> ({charge_desc}) and a GRAVY score of <b>{gravy}</b> ({hydro_desc}).')
+        tm = data.get('tm_helices',[])
+        if tm: summary_pts.append(f'<b>{len(tm)} transmembrane helix/helices</b> predicted — consistent with a membrane-associated protein.')
+        if data.get('signal_peptide',{}).get('detected'): summary_pts.append('A <b>signal peptide</b> was detected, suggesting this protein is secreted or membrane-targeted.')
+        inst = data.get('instability',0)
+        summary_pts.append(f'Instability index of <b>{inst}</b> classifies this sequence as <b>{"unstable" if inst>40 else "stable"}</b> in vitro (Guruprasad scale).')
+
+    if summary_pts:
+        b += '<div class="summary"><span class="summary-hd">Summary</span><ul>' + ''.join(f'<li style="margin-top:4px">{p}</li>' for p in summary_pts) + '</ul></div>'
+
+    # ── Table of contents (what's actually in this report) ────────────────
+    toc_items = []
+    if t in ('DNA','RNA'):
+        toc_items.append('Core Statistics')
+        if data.get('orfs'): toc_items.append(f"Open Reading Frames ({len(data['orfs'])})")
+        if data.get('restriction'): toc_items.append(f"Restriction Sites ({len(data['restriction'])})")
+        if data.get('promoter_elements'): toc_items.append(f"Regulatory Elements ({len(data['promoter_elements'])})")
+        if data.get('cpg_islands'): toc_items.append(f"CpG Islands ({len(data['cpg_islands'])})")
+        if data.get('microsatellites'): toc_items.append(f"Microsatellites ({len(data['microsatellites'])})")
+        if data.get('palindromes'): toc_items.append(f"Palindromes ({len(data['palindromes'])})")
+        if data.get('codon_usage'): toc_items.append('Codon Usage')
+        if data.get('primers'): toc_items.append('Primer Design')
+    elif t == 'PROTEIN':
+        toc_items += ['Physicochemical Properties', 'Structure Overview']
+        if data.get('tm_helices'): toc_items.append(f"Transmembrane Helices ({len(data['tm_helices'])})")
+        if data.get('aa_composition'): toc_items.append('Amino Acid Composition')
+    if data.get('ai_analysis'): toc_items.append('AI Interpretation')
+    if toc_items:
+        b += '<div class="toc"><b>Contents</b>' + ' <span>·</span> '.join(toc_items) + '</div>'
+
+    if t in ('DNA','RNA'):
+        s = data.get('stats',{}); m = data.get('melting',{})
+        b += '<div class="section"><h2>Core Statistics</h2><div class="g">' + \
+             stat_tile(f'{s.get("length",0):,}','Length (bp)') + \
+             stat_tile(f'{s.get("gc",0)}%','GC Content') + \
+             stat_tile(f'{m.get("nearest_neighbor",0)}°C','Tm (NN Method)') + \
+             stat_tile(f'{data.get("mw",0)/1000:.2f} kDa','Mol. Weight') + '</div>' + \
+             '<div class="g">' + \
+             stat_tile(f'{m.get("wallace",0)}°C','Tm (Wallace)') + \
+             stat_tile(f'{data.get("entropy",{}).get("complexity_pct","?")}%','Complexity') + \
+             stat_tile(f'{len(data.get("microsatellites",[]))}','SSR Repeats') + \
+             stat_tile(f'{len(data.get("palindromes",[]))}','Palindromes') + '</div>'
+
+        counts = s.get('counts', {})
+        total = sum(counts.get(k,0) for k in 'ATGC') or 1
+        colors = {'A':'#4cf0b4','T':'#ff9494','G':'#ffc94d','C':'#52ecff'}
+        bars = ''.join(f'<div style="width:{counts.get(k,0)/total*100:.2f}%;background:{colors[k]}">{k}: {counts.get(k,0)}</div>' for k in 'ATGC' if counts.get(k,0))
+        legend = ''.join(f'<span><i style="background:{colors[k]}"></i>{k} — {counts.get(k,0)/total*100:.1f}%</span>' for k in 'ATGC')
+        b += f'<div style="font-size:9.5px;color:#7691a0;font-family:\'IBM Plex Mono\',monospace;margin-bottom:4px">NUCLEOTIDE COMPOSITION</div><div class="compbar">{bars}</div><div class="complegend">{legend}</div></div>'
+        b += chart_img('chartBase', 'Nucleotide composition breakdown')
+        b += chart_img('chartGC', 'GC content — 100bp sliding window')
+
+        orfs = data.get('orfs',[])
         if orfs:
-            b+='<h2>ORFs</h2><table><tr><th>Frame</th><th>Strand</th><th>Start</th><th>End</th><th>Length</th><th>Protein aa</th></tr>'
-            for o in orfs[:10]: b+=f'<tr><td>{o["frame"]}</td><td>{o["strand"]}</td><td>{o["start"]}</td><td>{o["end"]}</td><td>{o["length"]}</td><td>{o["protein_len"]}</td></tr>'
-            b+='</table>'
-        rest=data.get('restriction',[])
+            b += '<div class="section"><h2>Open Reading Frames<span class="cnt">' + str(len(orfs)) + '</span></h2>'
+            b += table(['Frame','Strand','Start','End','Length (nt)','Protein (aa)'],
+                       [[o["frame"],o["strand"],o["start"],o["end"],o["length"],o["protein_len"]] for o in orfs[:12]])
+            b += '</div>'
+        if charts.get('chartGCSkew') or charts.get('chartATSkew'):
+            b += '<div class="section"><h2>Strand Skew Analysis</h2>'
+            b += chart_img('chartGCSkew', 'GC skew — (G−C)/(G+C) per window')
+            b += chart_img('chartATSkew', 'AT skew — (A−T)/(A+T) per window')
+            b += chart_img('chartCumSkew', 'Cumulative GC skew — replication origin/terminus indicator')
+            b += '</div>'
+        rest = data.get('restriction',[])
         if rest:
-            b+='<h2>Restriction Sites</h2><table><tr><th>Enzyme</th><th>Pattern</th><th>Cuts</th><th>Note</th></tr>'
-            for r in rest[:20]: b+=f'<tr><td><b>{r["enzyme"]}</b></td><td><code>{r["pattern"]}</code></td><td>{r["count"]}</td><td>{r["note"]}</td></tr>'
-            b+='</table>'
-        pe=data.get('promoter_elements',[])
+            b += '<div class="section"><h2>Restriction Sites<span class="cnt">' + str(len(rest)) + '</span></h2>'
+            b += table(['Enzyme','Recognition Site','Cuts','Note'],
+                       [[f'<b>{r["enzyme"]}</b>', f'<code>{r["pattern"]}</code>', r["count"], r["note"]] for r in rest[:20]])
+            b += '</div>'
+        pe = data.get('promoter_elements',[])
         if pe:
-            b+=f'<h2>Regulatory Elements ({len(pe)})</h2><table><tr><th>Type</th><th>Position</th><th>Sequence</th><th>Note</th></tr>'
-            for e in pe[:20]: b+=f'<tr><td>{e["type"]}</td><td>{e["position"]}</td><td><code>{e["sequence"]}</code></td><td>{e["note"]}</td></tr>'
-            b+='</table>'
-    elif t=='PROTEIN':
-        b+=f'<h2>Properties</h2><div class="g"><div class="t"><div class="v">{data.get("protein_mw",0)/1000:.3f}</div><div class="l">MW (kDa)</div></div><div class="t"><div class="v">{data.get("pi",0)}</div><div class="l">pI</div></div><div class="t"><div class="v">{data.get("gravy",0)}</div><div class="l">GRAVY</div></div><div class="t"><div class="v">{data.get("instability",0)}</div><div class="l">Instability</div></div></div>'
-        b+=f'<p>Structure: <b>{data.get("secondary",{}).get("likely","?")}</b> | TM Helices: <b>{len(data.get("tm_helices",[]))}</b> | Signal peptide: <b>{"Yes" if data.get("signal_peptide",{}).get("detected") else "No"}</b></p>'
-    ai=data.get('ai_analysis')
+            b += '<div class="section"><h2>Regulatory Elements<span class="cnt">' + str(len(pe)) + '</span></h2>'
+            b += table(['Type','Position','Sequence','Note'],
+                       [[e["type"], e["position"], f'<code>{e["sequence"]}</code>', e["note"]] for e in pe[:20]])
+            b += '</div>'
+        cpg = data.get('cpg_islands',[])
+        if cpg:
+            b += '<div class="section"><h2>CpG Islands<span class="cnt">' + str(len(cpg)) + '</span></h2>'
+            b += table(['Start','End','Length','GC%','Obs/Exp'],
+                       [[c.get("start"),c.get("end"),c.get("length"),c.get("gc"),c.get("obs_exp")] for c in cpg[:20]])
+            b += '</div>'
+        ssr = data.get('microsatellites',[])
+        if ssr:
+            b += '<div class="section"><h2>Microsatellites (SSRs)<span class="cnt">' + str(len(ssr)) + '</span></h2>'
+            b += table(['Unit', 'Repeats', 'Position', 'Length'],
+                       [[f'<code>{r.get("unit","")}</code>', r.get("count",r.get("repeats","")), r.get("position",r.get("pos","")), r.get("length","")] for r in ssr[:15]])
+            b += '</div>'
+        pal = data.get('palindromes',[])
+        if pal:
+            b += '<div class="section"><h2>Palindromic Sequences<span class="cnt">' + str(len(pal)) + '</span></h2>'
+            b += table(['Sequence', 'Position', 'Length'],
+                       [[f'<code>{p.get("sequence","")}</code>', p.get("position",p.get("pos","")), p.get("length","")] for p in pal[:15]])
+            b += '</div>'
+        codons = data.get('codon_usage',{})
+        if codons:
+            top_codons = sorted(((c,v) for c,v in codons.items() if v.get('aa') != '*'), key=lambda x:-x[1].get('count',0))[:12]
+            if top_codons:
+                b += '<div class="section"><h2>Codon Usage<span class="cnt">Top 12</span></h2>'
+                b += table(['Codon','Amino Acid','Count','Frequency'],
+                           [[f'<code>{c}</code>', v.get('aa','?'), v.get('count',0), f"{v.get('freq',0)}%" if 'freq' in v else '—'] for c,v in top_codons])
+                b += chart_img('chartCodon', 'Top 20 most-used codons')
+                b += chart_img('chartDi', 'Dinucleotide frequencies (CpG highlighted)')
+                b += '</div>'
+        primers = data.get('primers')
+        if primers and isinstance(primers, dict) and primers.get('forward'):
+            fwd, rev = primers.get('forward',{}), primers.get('reverse',{})
+            b += '<div class="section"><h2>Primer Design</h2>'
+            b += table(['Direction','Sequence','GC%','Tm (°C)'],
+                       [['Forward', f'<code>{fwd.get("sequence","")}</code>', fwd.get('gc',''), fwd.get('tm','')],
+                        ['Reverse', f'<code>{rev.get("sequence","")}</code>', rev.get('gc',''), rev.get('tm','')]])
+            b += '</div>'
+        if charts.get('chartMelt') or charts.get('chartEntropy'):
+            b += '<div class="section"><h2>Thermodynamics &amp; Complexity</h2><div class="chart-grid-2">'
+            b += chart_img('chartMelt', 'Simulated melting curve')
+            b += chart_img('chartEntropy', 'Sequence complexity (Shannon entropy)')
+            b += '</div></div>'
+
+    elif t == 'PROTEIN':
+        b += '<div class="section"><h2>Physicochemical Properties</h2><div class="g">' + \
+             stat_tile(f'{data.get("protein_mw",0)/1000:.3f}','MW (kDa)') + \
+             stat_tile(f'{data.get("pi",0)}','pI') + \
+             stat_tile(f'{data.get("gravy",0)}','GRAVY') + \
+             stat_tile(f'{data.get("instability",0)}','Instability') + '</div>' + \
+             '<div class="g">' + \
+             stat_tile(f'{data.get("aromaticity",0)}','Aromaticity') + \
+             stat_tile(f'{data.get("aliphatic_index",0)}','Aliphatic Index') + \
+             stat_tile(f'{data.get("extinction",{}).get("reduced","?") if isinstance(data.get("extinction"),dict) else data.get("extinction","?")}','Extinction (M⁻¹cm⁻¹)') + \
+             stat_tile(f'{len(data.get("tm_helices",[]))}','TM Helices') + '</div></div>'
+        sec = data.get('secondary',{})
+        b += f'<div class="section"><h2>Structure Overview</h2><div class="summary" style="margin-top:0"><b>Likely fold:</b> {sec.get("likely","?")} &nbsp;·&nbsp; <b>TM helices:</b> {len(data.get("tm_helices",[]))} &nbsp;·&nbsp; <b>Signal peptide:</b> {"Yes" if data.get("signal_peptide",{}).get("detected") else "No"}</div>'
+        b += chart_img('chartSecStr', 'Secondary structure propensity (α-helix vs β-sheet)')
+        b += '</div>'
+        tmh = data.get('tm_helices',[])
+        if tmh:
+            b += '<div class="section"><h2>Transmembrane Helices<span class="cnt">' + str(len(tmh)) + '</span></h2>'
+            b += table(['#','Start','End','Length'], [[i+1,h.get("start"),h.get("end"),h.get("length")] for i,h in enumerate(tmh[:15])])
+            b += '</div>'
+        if charts.get('chartHydro'):
+            b += '<div class="section"><h2>Hydrophobicity Profile</h2>'
+            b += chart_img('chartHydro', 'Kyte-Doolittle hydrophobicity along the sequence (TM threshold = 1.6)')
+            b += '</div>'
+        if charts.get('chartCharge'):
+            b += '<div class="section"><h2>Net Charge</h2>'
+            b += chart_img('chartCharge', 'Net charge vs pH (or residue position)')
+            b += '</div>'
+        aac = data.get('aa_composition',{})
+        if aac:
+            top_aa = sorted(aac.items(), key=lambda x:-x[1].get('count',0))
+            colors10 = ['#4cf0b4','#52ecff','#ffc94d','#dba6ff','#ff9494','#8fd9ee','#c9971c','#0077b6','#5c7385','#0d3d52']
+            total_aa = sum(v.get('count',0) for _,v in top_aa) or 1
+            bars = ''.join(f'<div style="width:{v.get("count",0)/total_aa*100:.2f}%;background:{colors10[i%10]}">{k if v.get("count",0)/total_aa>0.045 else ""}</div>' for i,(k,v) in enumerate(top_aa))
+            b += '<div class="section"><h2>Amino Acid Composition</h2>' + f'<div class="compbar" style="height:22px">{bars}</div>'
+            b += table(['Residue','Count','%'], [[k, v.get('count',0), f"{v.get('pct',round(v.get('count',0)/total_aa*100,1))}%"] for k,v in top_aa[:20]])
+            b += chart_img('chartAA', 'Amino acid composition (%)')
+            b += '</div>'
+
+    ai = data.get('ai_analysis')
     if ai:
-        import html as _html
         ai_safe = _html.escape(str(ai)).replace('\n','<br>')
-        b+=f'<h2>AI Interpretation</h2><div class="ai">{ai_safe}</div>'
-    b+=f'<div class="ft">Aaron\'s Archive | {now}</div></div>'
+        b += f'<div class="section"><h2>AI Interpretation</h2><div class="ai"><div class="ai-hd">AI-Generated — verify independently</div>{ai_safe}</div></div>'
+
+    # ── Methods note — grounds every figure in a named, checkable method ──
+    if t in ('DNA','RNA'):
+        b += '''<div class="methods"><span class="methods-hd">Methods</span>
+        <b>Tm (NN):</b> nearest-neighbor thermodynamic method. &nbsp;<b>Tm (Wallace):</b> Wallace rule, 4(G+C)+2(A+T), for short primers.
+        &nbsp;<b>GC skew:</b> (G−C)/(G+C) per window. &nbsp;<b>Complexity:</b> Shannon entropy of base composition, normalized to 0–100%.
+        &nbsp;<b>ORFs:</b> ATG→stop, all 6 reading frames, minimum length filtered. &nbsp;<b>CpG islands:</b> Gardiner-Garden &amp; Frommer criteria (GC% &gt; 50, Obs/Exp CpG &gt; 0.6, ≥200bp).</div>'''
+    elif t == 'PROTEIN':
+        b += '''<div class="methods"><span class="methods-hd">Methods</span>
+        <b>pI:</b> Henderson-Hasselbalch iterative estimation over standard pKa values. &nbsp;<b>GRAVY:</b> Kyte-Doolittle hydropathy, mean per residue.
+        &nbsp;<b>Instability index:</b> Guruprasad et al. 1990 dipeptide method (&gt;40 = predicted unstable in vitro).
+        &nbsp;<b>Aliphatic index:</b> Ikai 1980, relative volume of aliphatic side chains. &nbsp;<b>TM helices:</b> hydrophobicity window scan, threshold 1.6.</div>'''
+
+    b += '</div><div class="footer"><span>Aaron\'s Archive — DNA Analysis Engine</span><span>' + now + '</span></div></div>'
     return f"<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Aaron's Archive Report</title>{css}</head><body>{b}</body></html>"
 
 # ═══════════════════════════════════════════════
@@ -1330,7 +1693,7 @@ def index():
 
 @app.route('/analyze',methods=['POST'])
 def analyze():
-    d=request.json; raw=d.get('sequence','').strip()
+    d=_body(); raw=d.get('sequence','').strip()
     if not raw: return jsonify({'error':'No sequence provided'}),400
     seq=clean_seq(raw)
     if len(seq)>150000: return jsonify({'error':'Sequence too long (max 150,000 characters). Use Batch FASTA for multiple large sequences.'}),400
@@ -1366,7 +1729,7 @@ def analyze():
 
 @app.route('/batch',methods=['POST'])
 def batch():
-    d=request.json; raw=d.get('fasta','').strip()
+    d=_body(); raw=d.get('fasta','').strip()
     if not raw: return jsonify({'error':'No FASTA data'}),400
     seqs=parse_fasta(raw)
     if not seqs: return jsonify({'error':'No valid sequences. Format: >name\\nSEQUENCE'}),400
@@ -1374,7 +1737,7 @@ def batch():
 
 @app.route('/align',methods=['POST'])
 def align():
-    d=request.json; s1=clean_seq(d.get('seq1','')); s2=clean_seq(d.get('seq2',''))
+    d=_body(); s1=clean_seq(d.get('seq1','')); s2=clean_seq(d.get('seq2',''))
     if not s1 or not s2: return jsonify({'error':'Two sequences required'}),400
     if len(s1)>500 or len(s2)>500: return jsonify({'error':'Max 500 bp each'}),400
     st='PROTEIN' if detect_type(s1)=='PROTEIN' or detect_type(s2)=='PROTEIN' else 'DNA'
@@ -1384,39 +1747,61 @@ def align():
 
 @app.route('/primers_advanced',methods=['POST'])
 def primers_adv():
-    d=request.json; raw=d.get('sequence','').strip()
+    d=_body(); raw=d.get('sequence','').strip()
     if not raw: return jsonify({'error':'No sequence'}),400
     seq=clean_seq(raw)
     if len(seq)<60: return jsonify({'error':'Min 60 bp required'}),400
     if len(seq)>50000: return jsonify({'error':'Max 50,000 bp for primer design'}),400
     return jsonify({'count':8,'pairs':advanced_primers(seq)})
 
+_NT_DATABASES  = {'nt','refseq_rna','refseq_genomic'}
+_PROT_DATABASES = {'nr','refseq_protein','swissprot','pdb'}
+
 @app.route('/blast_submit',methods=['POST'])
 def blast_sub():
-    d=request.json; seq=clean_seq(d.get('sequence',''))
+    d=_body(); seq=clean_seq(d.get('sequence',''))
     if not seq: return jsonify({'error':'No sequence'}),400
     if len(seq)>10000: return jsonify({'error':'Max 10,000 bp for BLAST (NCBI limits apply)'}),400
     st=detect_type(seq); prog='blastp' if st=='PROTEIN' else 'blastn'
-    db=d.get('database','nt' if prog=='blastn' else 'nr')
+    # Default protein searches to refseq_protein (curated, ~20-60s) rather
+    # than nr (exhaustive, 1-5+ min) when no database was specified at all —
+    # nr is technically a *valid* protein database so the mismatch check
+    # below wouldn't catch or correct this, and nr is explicitly the slow
+    # option in our own UI, not what should be silently chosen by default.
+    db=d.get('database','nt' if prog=='blastn' else 'refseq_protein')
+    # The database dropdown holds both nucleotide and protein options
+    # together, and nothing was resetting it when the pasted sequence
+    # changed type — so a leftover protein selection (e.g. from a previous
+    # "KRAS protein" sample) could get silently paired with a freshly
+    # auto-detected DNA sequence. PROGRAM=blastn + DATABASE=refseq_protein
+    # is not a valid combination for NCBI; it doesn't cleanly error, it
+    # just behaves strangely (consistent with the wildly inflated RTOE seen
+    # in practice). Enforce the pairing server-side regardless of what the
+    # client sent, since this endpoint is the one place that actually knows
+    # the true detected type.
+    if prog=='blastn' and db not in _NT_DATABASES:
+        db='nt'
+    elif prog=='blastp' and db not in _PROT_DATABASES:
+        db='refseq_protein'
     try: return jsonify(blast_submit(seq,program=prog,database=db))
     except Exception as e: return jsonify({'error':str(e)}),500
 
 @app.route('/blast_poll',methods=['POST'])
 def blast_p():
-    rid=request.json.get('rid','')
+    rid=_body().get('rid','')
     if not rid: return jsonify({'error':'No RID'}),400
     try: return jsonify(blast_poll(rid))
     except Exception as e: return jsonify({'error':str(e)}),500
 
 @app.route('/report',methods=['POST'])
 def report():
-    d=request.json
+    d=_body()
     if not d: return 'No data',400
     return Response(make_report(d),mimetype='text/html')
 
 @app.route('/structure_search',methods=['POST'])
 def structure_route():
-    d=request.json
+    d=_body()
     gene=d.get('gene','').strip().upper()
     if not gene: return jsonify({'error':'No gene name'}),400
     if len(gene)>40 or not re.match(r'^[A-Z0-9\-\.]+$', gene):
@@ -1426,7 +1811,7 @@ def structure_route():
 
 @app.route('/phylo_tree',methods=['POST'])
 def phylo_tree_route():
-    d=request.json
+    d=_body()
     raw=d.get('fasta','').strip()
     if not raw: return jsonify({'error':'No FASTA sequences provided'}),400
     seqs_list=parse_fasta(raw)
@@ -1438,7 +1823,7 @@ def phylo_tree_route():
 
 @app.route('/ramachandran',methods=['POST'])
 def ramachandran_route():
-    d=request.json
+    d=_body()
     pdb_url=d.get('pdb_url','').strip()
     if not pdb_url: return jsonify({'error':'No PDB URL provided'}),400
     try: return jsonify({'points': ramachandran_from_pdb(pdb_url)})
@@ -1450,6 +1835,24 @@ def add_headers(resp):
     resp.headers['X-Frame-Options'] = 'SAMEORIGIN'
     resp.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     resp.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+    # Content-Security-Policy: restrict script/connection sources to exactly the
+    # domains this app actually loads from. script-src blocks any injected
+    # <script src="attacker.com/x.js"> from executing even if XSS gets a tag
+    # onto the page. connect-src does the same for fetch()/XHR — matches the
+    # server-side SSRF whitelist (_ALLOWED_FETCH_DOMAINS) as closely as possible,
+    # plus the client-side PDB downloads the 3D viewer makes directly from the
+    # browser (AlphaFold/RCSB), which never pass through our backend.
+    resp.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "img-src 'self' data:; "
+        "font-src 'self' data: https://fonts.gstatic.com; "
+        "connect-src 'self' https://*.ebi.ac.uk https://files.rcsb.org https://search.rcsb.org "
+        "https://rest.uniprot.org https://blast.ncbi.nlm.nih.gov; "
+        "frame-ancestors 'self'; "
+        "object-src 'none'; base-uri 'self'"
+    )
     # Gzip compress JSON/HTML/text responses over 1KB when the client supports it
     accept_enc = request.headers.get('Accept-Encoding', '')
     if ('gzip' in accept_enc and not resp.direct_passthrough
@@ -1470,7 +1873,7 @@ if __name__=='__main__':
     print('\n'+'═'*52)
     print("  \U0001f9ec  Aaron's Archive - DNA Analysis Engine")
     print('═'*52)
-    print('  Open: http://localhost:8080')
+    print('  Open: http://localhost:4040')
     print('  Stop: Ctrl+C')
     print('═'*52+'\n')
-    app.run(debug=False,port=8080)
+    app.run(debug=False,port=4040)

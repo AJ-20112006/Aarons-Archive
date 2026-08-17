@@ -5,65 +5,134 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Aaron's Archive — Free online DNA, RNA and protein sequence analysis. BLAST, phylogenetic trees, Ramachandran plots, 3D structure viewer and more.">
 <meta name="theme-color" content="#0a1628">
-<link rel="preconnect" href="https://cdnjs.cloudflare.com">
-<link rel="preconnect" href="https://3dmol.csb.pitt.edu">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
 <title>Aaron's Archive — DNA Analysis Engine</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Serif:wght@500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" crossorigin="anonymous"></script>
 <!-- 3Dmol loaded on demand -->
 <style>
 :root{
-  --bg:#060a0d;--panel:#0d1820;--panel2:#111f28;
-  --border:#172630;--border2:#1e3545;
-  --amber:#f0b429;--green:#34d399;--cyan:#22d3ee;
-  --red:#f87171;--purple:#c084fc;--pink:#f472b6;
-  --text:#cde4ec;--text2:#6b96a8;--text3:#3a5f70;
+  --bg:#050810;--panel:rgba(24,40,56,0.66);--panel2:rgba(30,48,64,0.62);
+  --panel-grad:linear-gradient(160deg, rgba(38,58,80,0.72) 0%, rgba(16,26,38,0.64) 100%);
+  --panel2-grad:linear-gradient(160deg, rgba(46,70,92,0.68) 0%, rgba(20,32,46,0.6) 100%);
+  --panel-solid:#0e1922;
+  --glass-lite:rgba(28,46,64,0.58);--glass-lite2:rgba(36,56,76,0.5);
+  --border:rgba(170,212,232,0.20);--border2:rgba(195,230,248,0.38);
+  --amber:#ffc94d;--green:#4cf0b4;--cyan:#52ecff;
+  --red:#ff9494;--purple:#dba6ff;--pink:#ff9ed3;
+  --text:#ffffff;--text2:#cbe5f2;--text3:#93bcd0;
+  --glass-blur:blur(24px) saturate(150%);
+  --glass-blur-lite:blur(14px) saturate(135%);
+  /* Nucleotide key — the real genome-browser convention (A/T/G/C), reused
+     as the app's functional accent system rather than arbitrary UI color */
+  --base-a:#4cf0b4;--base-t:#ff9494;--base-g:#ffc94d;--base-c:#52ecff;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-weight:300;min-height:100vh;overflow-x:hidden}
-body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
-  background:radial-gradient(ellipse 70% 40% at 15% 0%,rgba(34,211,238,0.04) 0%,transparent 60%),
-             radial-gradient(ellipse 50% 35% at 85% 5%,rgba(192,132,252,0.03) 0%,transparent 60%)}
+@media(prefers-reduced-motion:reduce){*{animation-duration:0.001ms!important;animation-iteration-count:1!important;transition-duration:0.001ms!important;scroll-behavior:auto!important}}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-weight:400;min-height:100vh;overflow-x:hidden}
+
+/* Aurora backdrop — bold, saturated, blurred color fields fixed behind the
+   whole app. This is what the glass panels actually catch and diffuse;
+   without real color/contrast back here, backdrop-blur has nothing to do. */
+body::before{content:'';position:fixed;inset:-10%;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(ellipse 44% 40% at 12% 8%, rgba(82,236,255,0.26) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 44% at 90% 4%, rgba(219,166,255,0.24) 0%, transparent 70%),
+    radial-gradient(ellipse 42% 38% at 82% 78%, rgba(76,240,180,0.20) 0%, transparent 70%),
+    radial-gradient(ellipse 38% 42% at 6% 85%, rgba(255,201,77,0.18) 0%, transparent 70%),
+    radial-gradient(ellipse 30% 34% at 55% 45%, rgba(255,158,211,0.12) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 50% at 50% 45%, rgba(6,10,16,0.4) 0%, transparent 80%);
+  filter:blur(70px);animation:auroraDrift 22s ease-in-out infinite alternate}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:var(--bg);opacity:0.26}
+@keyframes auroraDrift{
+  0%{transform:translate(0,0) scale(1)}
+  50%{transform:translate(-3%,2%) scale(1.06)}
+  100%{transform:translate(3%,-1.5%) scale(1.03)}
+}
+/* ── LIQUID GLASS SHEEN — a soft, understated corner highlight that
+   suggests light catching curved glass, without reading as a glare
+   streak. Applied to major panels/cards via .glass-sheen. ── */
+.glass-sheen{position:relative;isolation:isolate}
+.glass-sheen::before{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:1;
+  background:radial-gradient(ellipse 60% 40% at 18% -8%,rgba(255,255,255,0.10) 0%,transparent 60%);
+  opacity:0.7}
+.glass-sheen::after{content:'';position:absolute;inset:0 0 auto 0;height:1px;border-radius:inherit;pointer-events:none;z-index:1;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.28),transparent)}
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:var(--bg)}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px;border-radius:3px}
+
+/* ── PAGE-LOAD REVEAL ── */
+@keyframes revealUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.topbar,.toolnav,.layout{animation:revealUp .5s cubic-bezier(.16,1,.3,1) backwards}
+.toolnav{animation-delay:.06s}
+.layout{animation-delay:.12s}
 
 /* ── TOPBAR ── */
-.topbar{position:sticky;top:0;z-index:200;background:rgba(6,10,13,0.94);
-  border-bottom:1px solid var(--border);padding:0 24px;
-  display:flex;align-items:center;gap:14px;height:56px;backdrop-filter:blur(20px)}
-.brand{display:flex;align-items:center;gap:10px}
-.brand-mark{width:32px;height:32px;border:1.5px solid var(--amber);border-radius:7px;
-  display:flex;align-items:center;justify-content:center;font-size:16px;
-  background:rgba(240,180,41,0.07);box-shadow:0 0 14px rgba(240,180,41,0.22)}
-.brand h1{font-size:0.95rem;font-weight:800;letter-spacing:0.22em;color:var(--amber)}
+.topbar{position:sticky;top:0;z-index:200;background:linear-gradient(180deg,rgba(26,40,54,0.68),rgba(14,22,32,0.6));
+  border-bottom:1px solid var(--border2);padding:0 24px;
+  display:flex;align-items:center;gap:14px;height:56px;
+  backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
+  box-shadow:0 1px 0 rgba(255,255,255,0.06)}
+.brand{display:flex;align-items:center;gap:11px}
+.brand-mark{width:36px;height:44px;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative}
+.brand-mark::before{content:'';position:absolute;inset:-6px;border-radius:50%;
+  background:radial-gradient(circle,rgba(82,236,255,0.18) 0%,transparent 70%);
+  filter:blur(4px);animation:markGlow 4.5s ease-in-out infinite}
+@keyframes markGlow{0%,100%{opacity:0.5;transform:scale(0.9)}50%{opacity:1;transform:scale(1.1)}}
+.helix-svg{width:100%;height:100%;overflow:visible}
+.helix-strand{fill:none;stroke:var(--border2);stroke-width:1.6;stroke-linecap:round}
+.helix-strand-a{animation:helixGlowA 4.5s ease-in-out infinite}
+.helix-strand-b{animation:helixGlowA 4.5s ease-in-out infinite 2.25s}
+@keyframes helixGlowA{0%,100%{stroke:var(--border2)}50%{stroke:var(--cyan)}}
+.rung{stroke-width:2;stroke-linecap:round;transform-origin:center;animation:rungPulse 3.6s ease-in-out infinite}
+.rung-a{stroke:var(--base-a)}.rung-t{stroke:var(--base-t)}
+.rung-g{stroke:var(--base-g)}.rung-c{stroke:var(--base-c)}
+.helix-rungs .rung:nth-child(1){animation-delay:0s}
+.helix-rungs .rung:nth-child(2){animation-delay:.35s}
+.helix-rungs .rung:nth-child(3){animation-delay:.7s}
+.helix-rungs .rung:nth-child(4){animation-delay:1.05s}
+.helix-rungs .rung:nth-child(5){animation-delay:1.4s}
+@keyframes rungPulse{0%,100%{opacity:0.55;transform:scaleX(0.88)}50%{opacity:1;transform:scaleX(1)}}
+.brand h1{font-family:'IBM Plex Serif',serif;font-size:1.05rem;font-weight:600;letter-spacing:0.01em;color:var(--text);
+  background:linear-gradient(120deg,var(--text) 40%,var(--amber) 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .brand-sub{font-size:0.55rem;color:var(--text3);letter-spacing:0.12em;font-family:'IBM Plex Mono',monospace;margin-top:1px}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
-.status-pill{display:flex;align-items:center;gap:6px;background:rgba(52,211,153,0.06);
-  border:1px solid rgba(52,211,153,0.18);padding:4px 10px;border-radius:20px}
+.status-pill{display:flex;align-items:center;gap:6px;background:rgba(76,240,180,0.06);
+  border:1px solid rgba(76,240,180,0.18);padding:4px 10px;border-radius:20px}
 .status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 7px var(--green)}
 .status-pill span{font-size:0.58rem;color:var(--green);font-family:'IBM Plex Mono',monospace;letter-spacing:0.15em}
 
 /* ── TOOL NAV ── */
-.toolnav{position:sticky;top:56px;z-index:199;background:rgba(6,10,13,0.96);
-  border-bottom:1px solid var(--border);backdrop-filter:blur(20px)}
+.toolnav{position:sticky;top:56px;z-index:199;background:rgba(16,26,36,0.54);
+  border-bottom:1px solid var(--border);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur)}
 .toolnav-inner{max-width:1480px;margin:0 auto;padding:0 22px;
   display:flex;overflow-x:auto;scrollbar-width:none}
 .toolnav-inner::-webkit-scrollbar{display:none}
 .tnav{background:transparent;border:none;border-bottom:2px solid transparent;
   color:var(--text3);padding:13px 18px;font-size:0.65rem;font-family:'IBM Plex Mono',monospace;
   letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;white-space:nowrap;
-  transition:color .2s,border-color .2s;flex-shrink:0}
-.tnav:hover{color:var(--text2)}
-.tnav.active{color:var(--amber);border-bottom-color:var(--amber)}
-.tnav-new{display:inline-block;background:rgba(240,180,41,0.14);color:var(--amber);
+  position:relative;transition:color .25s,background .25s;flex-shrink:0;border-radius:6px 6px 0 0}
+.tnav:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+.tnav::after{content:'';position:absolute;left:14px;right:14px;bottom:-1px;height:2px;
+  background:var(--amber);border-radius:2px;transform:scaleX(0);transition:transform .3s cubic-bezier(.16,1,.3,1);
+  box-shadow:0 0 10px rgba(255,201,77,0.6)}
+.tnav.active{color:var(--amber);background:rgba(255,201,77,0.06)}
+.tnav.active::after{transform:scaleX(1)}
+.tnav-new{display:inline-block;background:rgba(255,201,77,0.14);color:var(--amber);
   font-size:0.48rem;padding:1px 5px;border-radius:3px;margin-left:5px;vertical-align:middle}
 
 /* ── LAYOUT ── */
-.tool-section{display:none;animation:fadeUp .28s ease}
+.tool-section{display:none;animation:fadeUp .38s cubic-bezier(.16,1,.3,1)}
 .tool-section.active{display:block}
-@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px) scale(0.99)}to{opacity:1;transform:translateY(0) scale(1)}}
+/* ── Global press feedback — gives every clickable control a satisfying,
+   springy "give" on click, the way top-tier native UIs feel. ── */
+button:active,.tnav:active,.tab:active,.samp:active,.struct-btn:active,.export-btn:active,.help-btn:active{
+  transform:scale(0.96);transition:transform .1s cubic-bezier(.4,0,.2,1)!important}
 .layout{max-width:1480px;margin:0 auto;padding:22px;display:grid;grid-template-columns:370px 1fr;gap:18px;align-items:start}
 @media(max-width:900px){
   .layout{grid-template-columns:1fr;padding:14px;gap:14px}
@@ -72,7 +141,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
      panel kept floating/pinning at top:98px while the results below it
      scrolled underneath — causing the reported overlap. Disable sticky here. */
   .input-panel{position:static;top:auto}
-  .topbar{padding:0 14px;gap:8px}
+  /* CRITICAL FIX: topbar+toolnav stack via hardcoded pixel math (toolnav's
+     top:56px assumes topbar is exactly 56px tall). That assumption can break
+     on mobile browsers due to font rendering differences, safe-area insets
+     on notched phones, or the dynamic address bar in mobile Safari/Chrome —
+     any of which desyncs the two sticky elements and makes them overlap each
+     other or the content below. Rather than chase exact pixel offsets that
+     can't be verified without a real device, disable sticky nav on mobile
+     entirely — it scrolls away normally instead, which can never overlap. */
+  .topbar{position:static;padding:0 14px;gap:8px}
+  .toolnav{position:static}
   .brand h1{font-size:0.8rem;letter-spacing:0.14em}
   .brand-sub{font-size:0.48rem}
   .toolnav-inner{padding:0 10px}
@@ -91,26 +169,28 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 }
 
 /* ── INPUT PANEL ── */
-.input-panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;
-  overflow:hidden;position:sticky;top:98px}
-.panel-hd{padding:12px 16px;border-bottom:1px solid var(--border);background:var(--panel2);
+.input-panel{background:var(--panel-grad);border:1px solid var(--border);border-radius:14px;
+  overflow:hidden;position:sticky;top:98px;
+  box-shadow:0 20px 50px rgba(0,0,0,0.4),inset 0 1px 0 rgba(255,255,255,0.05);
+  backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur)}
+.panel-hd{padding:12px 16px;border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02);
   display:flex;align-items:center;justify-content:space-between}
 .panel-hd span{font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;
   font-family:'IBM Plex Mono',monospace;color:var(--text2)}
 .panel-body{padding:15px;display:flex;flex-direction:column;gap:12px}
-textarea.seq{width:100%;min-height:190px;background:#020810;border:1px solid var(--border);
-  color:var(--green);padding:12px;border-radius:8px;font-family:'IBM Plex Mono',monospace;
+textarea.seq{width:100%;min-height:190px;background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none;border:1px solid var(--border);
+  color:var(--green);padding:12px;border-radius:9px;font-family:'IBM Plex Mono',monospace;
   font-size:0.76rem;line-height:1.9;letter-spacing:0.06em;resize:vertical;outline:none;
   transition:border-color .3s,box-shadow .3s}
 textarea.seq::placeholder{color:var(--text3)}
-textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(52,211,153,0.05)}
+textarea.seq:focus{border-color:rgba(76,240,180,0.5);box-shadow:0 0 0 4px rgba(76,240,180,0.08),0 0 24px rgba(76,240,180,0.1)}
 .field{display:flex;flex-direction:column;gap:5px}
 .field label{font-size:0.58rem;letter-spacing:0.18em;text-transform:uppercase;
   font-family:'IBM Plex Mono',monospace;color:var(--text2)}
-.field input,.field select{background:#020810;border:1px solid var(--border);
-  color:var(--cyan);padding:9px 12px;border-radius:7px;font-family:'IBM Plex Mono',monospace;
-  font-size:0.75rem;outline:none;transition:border-color .3s;width:100%}
-.field input:focus,.field select:focus{border-color:rgba(34,211,238,0.38)}
+.field input,.field select{background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none;border:1px solid var(--border);
+  color:var(--cyan);padding:9px 12px;border-radius:8px;font-family:'IBM Plex Mono',monospace;
+  font-size:0.75rem;outline:none;transition:border-color .3s,box-shadow .3s;width:100%}
+.field input:focus,.field select:focus{border-color:rgba(82,236,255,0.5);box-shadow:0 0 0 4px rgba(82,236,255,0.08),0 0 24px rgba(82,236,255,0.1)}
 .field .hint{font-size:0.58rem;color:var(--text3);font-family:'IBM Plex Mono',monospace;line-height:1.7}
 .field .hint a{color:var(--cyan);text-decoration:none}
 .field .hint a:hover{text-decoration:underline}
@@ -118,31 +198,39 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
 .samp{background:transparent;border:1px solid var(--border2);color:var(--text2);
   padding:4px 10px;border-radius:4px;font-size:0.63rem;font-family:'IBM Plex Mono',monospace;
   cursor:pointer;transition:all .18s;letter-spacing:0.05em}
-.samp:hover{border-color:var(--amber);color:var(--amber);background:rgba(240,180,41,0.05)}
-.btn-run{width:100%;padding:14px;background:linear-gradient(135deg,rgba(240,180,41,0.14),rgba(240,180,41,0.07));
+.samp:hover{border-color:var(--amber);color:var(--amber);background:rgba(255,201,77,0.1);box-shadow:0 4px 14px rgba(255,201,77,0.15);transform:translateY(-1px)}
+.samp:active{transform:translateY(0)}
+.btn-run{width:100%;padding:14px;background:linear-gradient(135deg,rgba(255,201,77,0.2),rgba(255,201,77,0.09));
   border:1px solid var(--amber);color:var(--amber);font-family:'Inter',sans-serif;font-weight:700;
   font-size:0.8rem;letter-spacing:0.2em;text-transform:uppercase;border-radius:8px;cursor:pointer;
-  transition:all .25s;position:relative;overflow:hidden}
-.btn-run:hover{background:linear-gradient(135deg,rgba(240,180,41,0.24),rgba(240,180,41,0.13));
-  box-shadow:0 0 24px rgba(240,180,41,0.18)}
-.btn-run:disabled{opacity:0.35;cursor:not-allowed}
-.err-box{background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.3);color:var(--red);
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+  transition:transform .2s cubic-bezier(.16,1,.3,1),box-shadow .3s,background .3s;position:relative;overflow:hidden}
+.btn-run::before{content:'';position:absolute;top:0;left:-60%;width:40%;height:100%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.22),transparent);
+  transform:skewX(-20deg);transition:left .6s ease}
+.btn-run:hover{background:linear-gradient(135deg,rgba(255,201,77,0.32),rgba(255,201,77,0.16));
+  box-shadow:0 6px 28px rgba(255,201,77,0.3);transform:translateY(-2px)}
+.btn-run:hover::before{left:130%}
+.btn-run:active{transform:translateY(0px) scale(0.99)}
+.btn-run:disabled{opacity:0.35;cursor:not-allowed;transform:none}
+.btn-run:disabled::before{display:none}
+.err-box{background:rgba(255,148,148,0.07);border:1px solid rgba(255,148,148,0.3);color:var(--red);
   padding:9px 13px;border-radius:7px;font-family:'IBM Plex Mono',monospace;font-size:0.7rem;
   display:none;line-height:1.6}
 .err-box.show{display:block}
 
 /* ── RESULTS ── */
 .right-panel{display:flex;flex-direction:column;gap:15px}
-.empty-state{background:var(--panel);border:1px solid var(--border);border-radius:12px;
-  padding:56px 36px;text-align:center}
+.empty-state{background:var(--panel-grad);border:1px solid var(--border);border-radius:12px;
+  padding:56px 36px;text-align:center;backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur)}
 .empty-icon{font-size:2.8rem;margin-bottom:14px;opacity:0.28}
 .empty-title{font-size:1.05rem;font-weight:600;color:var(--text2);margin-bottom:5px}
 .empty-sub{font-size:0.74rem;color:var(--text3);line-height:1.8}
 
 /* ── LOADING ── */
-.loading{background:var(--panel);border:1px solid var(--border);border-radius:12px;
+.loading{background:var(--panel-grad);border:1px solid var(--border);border-radius:12px;
   padding:52px;text-align:center;display:none;font-family:'IBM Plex Mono',monospace;
-  font-size:0.78rem;color:var(--text2)}
+  font-size:0.78rem;color:var(--text2);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur)}
 .loading.show{display:block}
 .load-bar{width:240px;height:2px;background:var(--border);margin:16px auto;
   border-radius:2px;overflow:hidden}
@@ -154,9 +242,31 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
 
 /* ── TILES ── */
 .tile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(126px,1fr));gap:9px}
-.stat-tile{background:var(--panel);border:1px solid var(--border);border-radius:10px;
-  padding:14px 13px;transition:border-color .2s,transform .18s;cursor:default}
-.stat-tile:hover{border-color:var(--border2);transform:translateY(-1px)}
+@keyframes tileIn{from{opacity:0;transform:translateY(6px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+.tile-grid .stat-tile{animation:tileIn .4s cubic-bezier(.16,1,.3,1) backwards}
+.tile-grid .stat-tile:nth-child(1){animation-delay:.02s}
+.tile-grid .stat-tile:nth-child(2){animation-delay:.05s}
+.tile-grid .stat-tile:nth-child(3){animation-delay:.08s}
+.tile-grid .stat-tile:nth-child(4){animation-delay:.11s}
+.tile-grid .stat-tile:nth-child(5){animation-delay:.14s}
+.tile-grid .stat-tile:nth-child(6){animation-delay:.17s}
+.tile-grid .stat-tile:nth-child(7){animation-delay:.20s}
+.tile-grid .stat-tile:nth-child(n+8){animation-delay:.22s}
+.stat-tile{position:relative;overflow:hidden;background:var(--glass-lite);
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+  border:1px solid var(--border);border-radius:10px;
+  padding:14px 13px;transition:border-color .25s,transform .22s cubic-bezier(.16,1,.3,1),box-shadow .25s,background .25s;cursor:default;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);
+  animation:tileIn .5s cubic-bezier(.16,1,.3,1) backwards}
+.stat-tile:nth-child(1){animation-delay:.02s}.stat-tile:nth-child(2){animation-delay:.06s}
+.stat-tile:nth-child(3){animation-delay:.10s}.stat-tile:nth-child(4){animation-delay:.14s}
+.stat-tile:nth-child(5){animation-delay:.18s}.stat-tile:nth-child(6){animation-delay:.22s}
+.stat-tile:nth-child(7){animation-delay:.26s}.stat-tile:nth-child(8){animation-delay:.30s}
+@keyframes tileIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.stat-tile::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 70% 50% at 14% -10%,rgba(255,255,255,0.06) 0%,transparent 65%);opacity:0.8}
+.stat-tile:hover{border-color:var(--border2);transform:translateY(-3px) scale(1.015);
+  background:rgba(48,74,98,0.42);box-shadow:0 10px 28px rgba(0,0,0,0.4),inset 0 1px 0 rgba(255,255,255,0.1)}
 .tile-lbl{font-size:0.54rem;letter-spacing:0.18em;text-transform:uppercase;
   font-family:'IBM Plex Mono',monospace;color:var(--text3);margin-bottom:7px}
 .tile-val{font-size:1.4rem;font-weight:800;line-height:1}
@@ -165,15 +275,21 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
 .vr{color:var(--red)}.vp{color:var(--purple)}.vpk{color:var(--pink)}
 
 /* ── TABS ── */
-.tabs-wrap{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:visible}
+.tabs-wrap{background:var(--panel-grad);border:1px solid var(--border);border-radius:14px;overflow:visible;
+  box-shadow:0 20px 50px rgba(0,0,0,0.4),inset 0 1px 0 rgba(255,255,255,0.05);
+  backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur)}
 .tab-bar{display:flex;overflow-x:auto;background:var(--panel2);border-bottom:1px solid var(--border);scrollbar-width:none}
 .tab-bar::-webkit-scrollbar{display:none}
 .tab{padding:10px 15px;font-size:0.62rem;font-family:'IBM Plex Mono',monospace;letter-spacing:0.1em;
-  text-transform:uppercase;cursor:pointer;border-bottom:2px solid transparent;
-  color:var(--text3);white-space:nowrap;transition:all .18s;flex-shrink:0;user-select:none}
-.tab:hover{color:var(--text2)}
-.tab.active{color:var(--cyan);border-bottom-color:var(--cyan)}
-.tab-content{display:none;padding:18px;animation:fadeUp .22s ease;overflow:visible}
+  text-transform:uppercase;cursor:pointer;position:relative;border-radius:6px 6px 0 0;
+  color:var(--text3);white-space:nowrap;transition:color .2s,background .2s;flex-shrink:0;user-select:none}
+.tab::after{content:'';position:absolute;left:10px;right:10px;bottom:-1px;height:2px;
+  background:var(--cyan);border-radius:2px;transform:scaleX(0);transition:transform .3s cubic-bezier(.16,1,.3,1);
+  box-shadow:0 0 8px rgba(82,236,255,0.5)}
+.tab:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+.tab.active{color:var(--cyan);background:rgba(82,236,255,0.05)}
+.tab.active::after{transform:scaleX(1)}
+.tab-content{display:none;padding:18px;animation:fadeUp .28s cubic-bezier(.16,1,.3,1);overflow:visible}
 .tab-content.active{display:block}
 
 /* ── SHARED ELEMENTS ── */
@@ -182,61 +298,75 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
   padding-bottom:7px;border-bottom:1px solid var(--border);
   display:flex;align-items:center;gap:7px}
 .sec-head::before{content:'';display:block;width:2px;height:11px;background:var(--cyan);border-radius:2px}
-.chart-box{background:#020810;border:1px solid var(--border);border-radius:9px;padding:14px;margin-bottom:14px}
+.chart-box{background-color:#080d14;
+  background-image:linear-gradient(165deg,rgba(255,255,255,0.025),transparent 40%),linear-gradient(165deg,rgba(12,20,28,0.9),rgba(5,8,13,0.95));
+  backdrop-filter:none;-webkit-backdrop-filter:none;border:1px solid var(--border);border-radius:11px;
+  padding:16px;margin-bottom:14px;transition:border-color .25s,box-shadow .25s}
+.chart-box:hover{border-color:var(--border2);box-shadow:0 6px 22px rgba(0,0,0,0.35)}
+.chart-box canvas{filter:drop-shadow(0 3px 8px rgba(0,0,0,0.4))}
+/* Chart.js sizes a canvas from its parent's CSS box, not from HTML
+   width/height attributes on the canvas itself — mixing both is what
+   causes charts to silently render at the wrong (sometimes near-zero)
+   size. Every chart canvas now sits in a wrapper with an explicit CSS
+   height (below, per chart), and maintainAspectRatio is turned off in
+   JS so Chart.js just fills that box exactly instead of guessing. */
+.chart-frame{position:relative;width:100%}
 .data-table{width:100%;border-collapse:collapse;font-size:0.76rem}
 .data-table th{background:var(--panel2);color:var(--text2);padding:7px 11px;text-align:left;
   font-weight:500;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;
   border-bottom:1px solid var(--border)}
-.data-table td{padding:6px 11px;border-bottom:1px solid rgba(23,38,48,0.6);vertical-align:middle}
+.data-table td{padding:6px 11px;border-bottom:1px solid rgba(150,190,210,0.14);vertical-align:middle;transition:background .18s}
 .data-table tr:last-child td{border-bottom:none}
-.data-table tr:hover td{background:rgba(255,255,255,0.012)}
+.data-table tr:hover td{background:rgba(255,255,255,0.05)}
 .badge{display:inline-flex;align-items:center;padding:2px 6px;border-radius:4px;
   font-size:0.58rem;font-weight:600;font-family:'IBM Plex Mono',monospace;letter-spacing:0.05em;white-space:nowrap}
-.bg{background:rgba(52,211,153,0.1);color:var(--green);border:1px solid rgba(52,211,153,0.22)}
-.ba{background:rgba(240,180,41,0.1);color:var(--amber);border:1px solid rgba(240,180,41,0.22)}
-.bc{background:rgba(34,211,238,0.08);color:var(--cyan);border:1px solid rgba(34,211,238,0.18)}
-.br{background:rgba(248,113,113,0.08);color:var(--red);border:1px solid rgba(248,113,113,0.18)}
-.bp{background:rgba(192,132,252,0.08);color:var(--purple);border:1px solid rgba(192,132,252,0.18)}
-.seq-display{font-family:'IBM Plex Mono',monospace;font-size:0.7rem;background:#020810;
+.bg{background:rgba(76,240,180,0.1);color:var(--green);border:1px solid rgba(76,240,180,0.22)}
+.ba{background:rgba(255,201,77,0.1);color:var(--amber);border:1px solid rgba(255,201,77,0.22)}
+.bc{background:rgba(82,236,255,0.08);color:var(--cyan);border:1px solid rgba(82,236,255,0.18)}
+.br{background:rgba(255,148,148,0.08);color:var(--red);border:1px solid rgba(255,148,148,0.18)}
+.bp{background:rgba(219,166,255,0.08);color:var(--purple);border:1px solid rgba(219,166,255,0.18)}
+.seq-display{font-family:'IBM Plex Mono',monospace;font-size:0.7rem;background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none;
   border:1px solid var(--border);border-radius:7px;padding:11px;word-break:break-all;
   line-height:2;margin-bottom:9px;letter-spacing:0.07em}
 .primer-seq{font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:var(--green);
-  word-break:break-all;background:rgba(52,211,153,0.04);padding:9px 11px;border-radius:6px;
-  border:1px solid rgba(52,211,153,0.1);margin:5px 0;line-height:1.8}
+  word-break:break-all;background:rgba(76,240,180,0.04);padding:9px 11px;border-radius:6px;
+  border:1px solid rgba(76,240,180,0.1);margin:5px 0;line-height:1.8}
 .export-bar{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
-.export-btn{background:rgba(52,211,153,0.07);border:1px solid rgba(52,211,153,0.25);
+.export-btn{background:rgba(76,240,180,0.07);border:1px solid rgba(76,240,180,0.25);
   color:var(--green);padding:8px 16px;border-radius:7px;font-family:'IBM Plex Mono',monospace;
   font-size:0.63rem;letter-spacing:0.1em;cursor:pointer;transition:all .2s}
-.export-btn:hover{background:rgba(52,211,153,0.14);box-shadow:0 0 14px rgba(52,211,153,0.12)}
-.export-btn.blue{background:rgba(34,211,238,0.07);border-color:rgba(34,211,238,0.25);color:var(--cyan)}
-.export-btn.blue:hover{background:rgba(34,211,238,0.14)}
-.ai-card{background:linear-gradient(135deg,rgba(240,180,41,0.04),rgba(34,211,238,0.03));
-  border:1px solid rgba(240,180,41,0.18);border-radius:11px;padding:22px 20px;position:relative;
-  overflow:visible;height:auto}
+.export-btn:hover{background:rgba(76,240,180,0.14);box-shadow:0 0 14px rgba(76,240,180,0.12)}
+.export-btn.blue{background:rgba(82,236,255,0.07);border-color:rgba(82,236,255,0.25);color:var(--cyan)}
+.export-btn.blue:hover{background:rgba(82,236,255,0.14)}
+.ai-card{background:linear-gradient(135deg,rgba(255,201,77,0.07),rgba(82,236,255,0.05));
+  border:1px solid rgba(255,201,77,0.18);border-radius:11px;padding:22px 20px;position:relative;
+  overflow:visible;height:auto;backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur)}
 .ai-card::before{content:'◈ AI INTERPRETATION';position:absolute;top:-8px;left:14px;
   background:var(--bg);padding:0 7px;font-size:0.54rem;letter-spacing:0.2em;
   color:var(--amber);font-family:'IBM Plex Mono',monospace}
 .ai-text{font-size:0.86rem;line-height:1.9;color:var(--text);overflow:visible;height:auto;white-space:normal;word-wrap:break-word}
-.align-block{background:#020810;border:1px solid var(--border);border-radius:9px;
+.align-block{background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none;border:1px solid var(--border);border-radius:9px;
   padding:14px;font-family:'IBM Plex Mono',monospace;font-size:0.69rem;overflow-x:auto;
   line-height:2;white-space:pre}
-.pair-card{background:var(--panel);border:1px solid var(--border);border-radius:11px;
-  padding:16px;margin-bottom:10px;transition:border-color .2s}
-.pair-card:hover{border-color:var(--border2)}
-.pair-card.top{border-color:rgba(52,211,153,0.28);background:rgba(52,211,153,0.02)}
-.blast-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;
-  padding:14px;margin-bottom:9px;transition:border-color .2s}
-.blast-card:hover{border-color:var(--border2)}
+.pair-card{background:var(--panel-grad);border:1px solid var(--border);border-radius:11px;
+  padding:16px;margin-bottom:10px;transition:border-color .2s,transform .18s;
+  backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur)}
+.pair-card:hover{border-color:var(--border2);transform:translateY(-1px)}
+.pair-card.top{border-color:rgba(76,240,180,0.28);background:rgba(76,240,180,0.05)}
+.blast-card{background:var(--panel-grad);border:1px solid var(--border);border-radius:10px;
+  padding:14px;margin-bottom:9px;transition:border-color .2s,transform .18s;
+  backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur)}
+.blast-card:hover{border-color:var(--border2);transform:translateY(-1px)}
 
 /* ── ORF MAP ── */
-.orf-map{background:#020810;border:1px solid var(--border);border-radius:9px;padding:14px;overflow-x:auto;margin-bottom:14px}
+.orf-map{background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none;border:1px solid var(--border);border-radius:9px;padding:14px;overflow-x:auto;margin-bottom:14px}
 .orf-lane{height:22px;position:relative;margin-bottom:4px}
 .orf-bar{position:absolute;height:16px;top:3px;border-radius:3px;display:flex;align-items:center;
   padding:0 4px;overflow:hidden;white-space:nowrap;border:1px solid;cursor:default;min-width:2px;
   font-size:0.45rem;font-family:'IBM Plex Mono',monospace}
 
 /* ── REMAP ── */
-.remap{position:relative;background:#020810;border:1px solid var(--border);border-radius:9px;
+.remap{position:relative;background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none;border:1px solid var(--border);border-radius:9px;
   padding:18px 18px 10px;overflow-x:auto;min-height:60px}
 .remap-lane{position:relative;height:24px;margin-bottom:3px}
 .remap-line{position:absolute;top:11px;left:0;right:0;height:1px;background:var(--border)}
@@ -247,92 +377,119 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
 /* ── CODON GRID ── */
 .codon-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;margin-top:7px}
 .codon-cell{aspect-ratio:1;border-radius:3px;display:flex;flex-direction:column;align-items:center;
-  justify-content:center;cursor:default;transition:transform .1s}
+  justify-content:center;cursor:default;transition:transform .1s;position:relative}
 .codon-cell:hover{transform:scale(1.14);z-index:5}
 .codon-cell .cod{font-size:0.43rem;font-weight:700;font-family:'IBM Plex Mono',monospace}
 .codon-cell .cnt{font-size:0.4rem;font-family:'IBM Plex Mono',monospace}
+/* Custom hover overlay for the codon heatmap — matches the Chart.js
+   tooltip styling instead of the browser's slow, unstyled native title
+   tooltip (which was easy to miss and didn't match the rest of the app). */
+.cell-tooltip{position:fixed;z-index:900;pointer-events:none;
+  background:rgba(14,24,34,0.96);border:1px solid rgba(120,160,190,0.35);border-radius:8px;
+  padding:7px 11px;font-family:'IBM Plex Mono',monospace;font-size:0.68rem;color:#eef7fb;
+  box-shadow:0 6px 20px rgba(0,0,0,0.5);opacity:0;transform:translateY(4px);
+  transition:opacity .12s,transform .12s;white-space:nowrap}
+.cell-tooltip.show{opacity:1;transform:translateY(0)}
+.cell-tooltip b{color:#ffc94d}
 
 /* ── HELP BUTTON & PANEL ── */
-.help-btn{position:fixed;bottom:24px;right:24px;z-index:500;width:50px;height:50px;
-  border-radius:50%;background:var(--panel2);border:1.5px solid var(--border2);color:var(--amber);
-  font-size:1.3rem;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,0.5);
-  transition:all .25s;display:flex;align-items:center;justify-content:center;
-  font-family:'IBM Plex Mono',monospace}
-.help-btn:hover{border-color:var(--amber);box-shadow:0 0 22px rgba(240,180,41,0.28),0 4px 20px rgba(0,0,0,0.5);transform:scale(1.08)}
-.help-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:490;
-  display:none;backdrop-filter:blur(3px)}
-.help-overlay.open{display:block}
+.help-btn{position:fixed;bottom:24px;right:24px;z-index:500;width:54px;height:54px;
+  border-radius:50%;background:linear-gradient(150deg,rgba(255,201,77,0.22),var(--panel2));border:1.5px solid var(--border2);color:var(--amber);
+  font-size:1.3rem;font-weight:700;cursor:pointer;box-shadow:0 4px 24px rgba(0,0,0,0.5),0 0 0 0 rgba(255,201,77,0.4);
+  transition:transform .3s cubic-bezier(.16,1,.3,1),box-shadow .3s,border-color .25s,background .3s;display:flex;align-items:center;justify-content:center;
+  font-family:'IBM Plex Mono',monospace;backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
+  animation:helpPulse 3.5s ease-in-out infinite}
+@keyframes helpPulse{0%,100%{box-shadow:0 4px 24px rgba(0,0,0,0.5),0 0 0 0 rgba(255,201,77,0.4)}50%{box-shadow:0 4px 24px rgba(0,0,0,0.5),0 0 0 10px rgba(255,201,77,0)}}
+.help-btn:hover{border-color:var(--amber);background:linear-gradient(150deg,rgba(255,201,77,0.34),var(--panel2));box-shadow:0 0 34px rgba(255,201,77,0.5),0 4px 24px rgba(0,0,0,0.5);transform:scale(1.12) rotate(8deg);animation-play-state:paused}
+.help-overlay{position:fixed;inset:0;background:rgba(3,6,12,0.5);z-index:490;
+  display:none;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);opacity:0;transition:opacity .35s}
+.help-overlay.open{display:block;opacity:1}
 .help-panel{position:fixed;top:0;right:0;bottom:0;z-index:495;width:min(460px,95vw);
-  background:var(--panel);border-left:1px solid var(--border);overflow-y:auto;
-  transform:translateX(100%);transition:transform .32s cubic-bezier(.4,0,.2,1)}
+  background:var(--panel-grad);border-left:1px solid var(--border2);overflow-y:auto;
+  transform:translateX(100%);transition:transform .42s cubic-bezier(.16,1,.3,1);
+  backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
+  box-shadow:-24px 0 60px rgba(0,0,0,0.5),inset 1px 0 0 rgba(255,255,255,0.06)}
 .help-panel.open{transform:translateX(0)}
-.help-top{position:sticky;top:0;background:var(--panel2);border-bottom:1px solid var(--border);
-  padding:16px 18px;display:flex;align-items:center;justify-content:space-between;z-index:2}
-.help-top h2{font-size:0.88rem;font-weight:700;color:var(--amber);letter-spacing:0.08em}
-.help-close{background:none;border:none;color:var(--text2);font-size:1.3rem;cursor:pointer;
-  padding:0 4px;line-height:1;transition:color .15s}
-.help-close:hover{color:var(--text)}
-.help-search{padding:11px 18px;border-bottom:1px solid var(--border)}
-.help-search input{width:100%;background:#020810;border:1px solid var(--border);
-  color:var(--text);padding:8px 13px;border-radius:7px;font-family:'IBM Plex Mono',monospace;
-  font-size:0.74rem;outline:none}
-.help-search input:focus{border-color:var(--amber)}
+.help-top{position:sticky;top:0;background:var(--panel2);border-bottom:1px solid var(--border2);
+  padding:16px 18px;display:flex;align-items:center;justify-content:space-between;z-index:2;
+  backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur)}
+.help-top h2{font-size:0.98rem;font-weight:600;color:var(--amber);letter-spacing:0.01em;
+  font-family:'IBM Plex Serif',serif;text-shadow:0 0 20px rgba(255,201,77,0.35)}
+.help-close{background:rgba(255,255,255,0.06);border:1px solid var(--border2);color:var(--text2);
+  font-size:1.1rem;cursor:pointer;width:28px;height:28px;border-radius:8px;line-height:1;
+  transition:all .2s;display:flex;align-items:center;justify-content:center}
+.help-close:hover{color:var(--text);border-color:var(--red);background:rgba(255,148,148,0.14);transform:rotate(90deg)}
+.help-search{padding:12px 18px;border-bottom:1px solid var(--border)}
+.help-search input{width:100%;background:var(--glass-lite2);border:1px solid var(--border2);
+  color:var(--text);padding:9px 14px;border-radius:8px;font-family:'IBM Plex Mono',monospace;
+  font-size:0.74rem;outline:none;transition:border-color .25s,box-shadow .25s,background .25s;
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+.help-search input:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(255,201,77,0.16),0 0 26px rgba(255,201,77,0.12)}
 .help-sec{border-bottom:1px solid var(--border)}
-.help-sec-hd{padding:13px 18px;display:flex;align-items:center;justify-content:space-between;
-  cursor:pointer;transition:background .15s;user-select:none}
-.help-sec-hd:hover{background:rgba(255,255,255,0.018)}
-.help-sec-hd h3{font-size:0.76rem;font-weight:600;color:var(--text)}
-.help-arrow{color:var(--text3);transition:transform .22s;font-size:0.75rem}
+.help-sec-hd{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;
+  cursor:pointer;transition:background .25s;user-select:none}
+.help-sec-hd:hover{background:rgba(255,255,255,0.06)}
+.help-sec-hd h3{font-size:0.75rem;font-weight:600;color:var(--text);font-family:'IBM Plex Mono',monospace;letter-spacing:0.02em}
+.help-arrow{color:var(--cyan);transition:transform .25s cubic-bezier(.4,0,.2,1);font-size:0.75rem}
 .help-sec-hd.open .help-arrow{transform:rotate(90deg)}
-.help-items{display:none;padding:0 18px 14px}
-.help-items.open{display:block}
-.help-item{margin-bottom:10px}
-.help-term{font-size:0.7rem;font-weight:600;color:var(--cyan);font-family:'IBM Plex Mono',monospace;
-  margin-bottom:3px;cursor:pointer;display:flex;align-items:center;gap:5px}
-.help-term::before{content:'▶';font-size:0.5rem;color:var(--text3);transition:transform .18s;flex-shrink:0}
+.help-items{max-height:0;overflow:hidden;padding:0 18px;transition:max-height .4s cubic-bezier(.16,1,.3,1),padding .4s}
+.help-items.open{max-height:4000px;padding:2px 18px 16px}
+.help-item{margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1px solid transparent;
+  background:var(--glass-lite2);backdrop-filter:none;-webkit-backdrop-filter:none;
+  transition:background .22s,border-color .22s,transform .22s}
+.help-item:hover{background:rgba(82,236,255,0.07);border-color:rgba(82,236,255,0.22);transform:translateX(2px)}
+.help-term{font-size:0.72rem;font-weight:600;color:var(--cyan);font-family:'IBM Plex Mono',monospace;
+  margin-bottom:4px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:color .18s}
+.help-term:hover{color:var(--text)}
+.help-term::before{content:'▶';font-size:0.5rem;color:var(--text3);transition:transform .2s,color .18s;flex-shrink:0}
 .help-term.open::before{transform:rotate(90deg);color:var(--cyan)}
-.help-def{font-size:0.74rem;color:var(--text2);line-height:1.75;display:none;
-  padding-left:11px;border-left:2px solid var(--border2);margin-top:4px}
-.help-def.open{display:block}
-.help-eg{font-size:0.64rem;color:var(--text3);font-family:'IBM Plex Mono',monospace;
-  margin-top:5px;padding:5px 8px;background:rgba(255,255,255,0.02);border-radius:4px;line-height:1.6}
+.help-def{font-size:0.79rem;color:var(--text2);line-height:1.72;display:none;
+  font-family:'Inter',sans-serif;font-weight:400;letter-spacing:0.001em;
+  padding-left:12px;border-left:2px solid var(--cyan);margin-top:5px}
+.help-def b{font-weight:600;color:var(--text)}
+.help-def.open{display:block;animation:fadeUp .3s cubic-bezier(.16,1,.3,1)}
+.help-eg{font-size:0.65rem;color:var(--text2);font-family:'IBM Plex Mono',monospace;
+  margin-top:6px;padding:7px 10px;background:rgba(82,236,255,0.09);border:1px solid rgba(82,236,255,0.22);
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+  border-radius:6px;line-height:1.7}
+
 
 /* ── STRUCTURE VIEWER ── */
-.struct-wrap{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:14px}
+.struct-wrap{background:var(--panel-grad);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:14px;backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur)}
 .struct-header{padding:14px 18px;background:var(--panel2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .struct-title{font-size:0.82rem;font-weight:700;color:var(--amber)}
 .struct-sub{font-size:0.62rem;color:var(--text2);font-family:'IBM Plex Mono',monospace;margin-top:2px}
 .struct-body{display:grid;grid-template-columns:1fr 280px;gap:0}
 @media(max-width:900px){.struct-body{grid-template-columns:1fr}}
-.struct-viewer{position:relative;height:440px;background:#020810}
+.struct-viewer{position:relative;min-height:440px;height:100%;background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none}
 .struct-viewer canvas{display:block}
 .struct-loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(2,8,16,0.92);z-index:10}
 .struct-loading .load-bar{width:180px}
 .struct-controls{padding:14px;border-left:1px solid var(--border);background:var(--panel2);display:flex;flex-direction:column;gap:10px;overflow-y:auto}
 .struct-control-group{display:flex;flex-direction:column;gap:5px}
 .struct-control-group label{font-size:0.54rem;letter-spacing:0.15em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:var(--text3)}
-.struct-btn{width:100%;padding:8px;background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.22);color:var(--cyan);border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:0.62rem;letter-spacing:0.08em;cursor:pointer;transition:all .2s;text-align:left}
-.struct-btn:hover{background:rgba(34,211,238,0.16);box-shadow:0 0 12px rgba(34,211,238,0.12)}
-.struct-btn.active{background:rgba(34,211,238,0.2);border-color:var(--cyan);color:#fff}
-.struct-btn.amber{background:rgba(240,180,41,0.08);border-color:rgba(240,180,41,0.22);color:var(--amber)}
-.struct-btn.amber:hover{background:rgba(240,180,41,0.16)}
-.struct-btn.green{background:rgba(52,211,153,0.08);border-color:rgba(52,211,153,0.22);color:var(--green)}
-.struct-btn.green:hover{background:rgba(52,211,153,0.16)}
+.struct-btn{width:100%;padding:8px;background:rgba(82,236,255,0.08);border:1px solid rgba(82,236,255,0.22);color:var(--cyan);border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:0.62rem;letter-spacing:0.08em;cursor:pointer;transition:all .2s;text-align:left}
+.struct-btn:hover{background:rgba(82,236,255,0.16);box-shadow:0 0 12px rgba(82,236,255,0.12)}
+.struct-btn.active{background:rgba(82,236,255,0.2);border-color:var(--cyan);color:#fff}
+.struct-btn.amber{background:rgba(255,201,77,0.08);border-color:rgba(255,201,77,0.22);color:var(--amber)}
+.struct-btn.amber:hover{background:rgba(255,201,77,0.16)}
+.struct-btn.green{background:rgba(76,240,180,0.08);border-color:rgba(76,240,180,0.22);color:var(--green)}
+.struct-btn.green:hover{background:rgba(76,240,180,0.16)}
 .struct-source-tabs{display:flex;gap:4px;margin-bottom:4px}
 .struct-source-tab{flex:1;padding:6px 4px;text-align:center;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:5px;font-size:0.55rem;font-family:'IBM Plex Mono',monospace;cursor:pointer;color:var(--text3);transition:all .2s}
-.struct-source-tab.active{background:rgba(240,180,41,0.1);border-color:var(--amber);color:var(--amber)}
+.struct-source-tab.active{background:rgba(255,201,77,0.1);border-color:var(--amber);color:var(--amber)}
 .struct-rcsb-list{display:flex;flex-direction:column;gap:4px;margin-top:4px}
-.struct-rcsb-btn{padding:5px 8px;background:rgba(192,132,252,0.07);border:1px solid rgba(192,132,252,0.2);border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--purple);cursor:pointer;transition:all .18s;text-align:left}
-.struct-rcsb-btn:hover{background:rgba(192,132,252,0.16)}
+.struct-rcsb-btn{padding:5px 8px;background:rgba(219,166,255,0.07);border:1px solid rgba(219,166,255,0.2);border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--purple);cursor:pointer;transition:all .18s;text-align:left}
+.struct-rcsb-btn:hover{background:rgba(219,166,255,0.16)}
 .struct-func{font-size:0.7rem;color:var(--text2);line-height:1.7;padding:10px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:7px}
 .struct-err{padding:14px 18px;color:var(--red);font-family:'IBM Plex Mono',monospace;font-size:0.72rem;line-height:1.6}
-.view-struct-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:rgba(192,132,252,0.1);border:1px solid rgba(192,132,252,0.3);border-radius:6px;color:var(--purple);font-family:'IBM Plex Mono',monospace;font-size:0.62rem;letter-spacing:0.08em;cursor:pointer;margin-top:8px;transition:all .2s}
-.view-struct-btn:hover{background:rgba(192,132,252,0.2);box-shadow:0 0 14px rgba(192,132,252,0.15)}
+.view-struct-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:rgba(219,166,255,0.1);border:1px solid rgba(219,166,255,0.3);border-radius:6px;color:var(--purple);font-family:'IBM Plex Mono',monospace;font-size:0.62rem;letter-spacing:0.08em;cursor:pointer;margin-top:8px;transition:all .2s}
+.view-struct-btn:hover{background:rgba(219,166,255,0.2);box-shadow:0 0 14px rgba(219,166,255,0.15)}
 /* ── PHYLO TREE ── */
-.phylo-wrap{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.phylo-wrap{background:var(--panel-grad);border:1px solid var(--border);border-radius:12px;overflow:hidden;backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur)}
 .phylo-header{padding:14px 18px;background:var(--panel2);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
-.phylo-canvas-wrap{padding:18px;overflow:auto;min-height:400px;background:#020810}
-.phylo-dm{overflow-x:auto;padding:12px 18px;background:#020810;border-top:1px solid var(--border)}
+.phylo-canvas-wrap{padding:18px;overflow:auto;min-height:400px;background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none}
+.phylo-dm{overflow-x:auto;padding:12px 18px;background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none;border-top:1px solid var(--border)}
 .phylo-dm table{border-collapse:collapse;font-family:'IBM Plex Mono',monospace;font-size:0.6rem}
 .phylo-dm td,.phylo-dm th{padding:4px 8px;border:1px solid var(--border);text-align:right}
 .phylo-dm th{background:var(--panel2);color:var(--amber);text-align:center}
@@ -352,7 +509,19 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
 <!-- TOPBAR -->
 <nav class="topbar">
   <div class="brand">
-    <div class="brand-mark">🧬</div>
+    <div class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 36 44" class="helix-svg">
+        <path class="helix-strand helix-strand-a" d="M4,2 C4,10 32,12 32,20 C32,28 4,30 4,38"/>
+        <path class="helix-strand helix-strand-b" d="M32,2 C32,10 4,12 4,20 C4,28 32,30 32,38"/>
+        <g class="helix-rungs">
+          <line x1="7" y1="6"  x2="29" y2="6"  class="rung rung-a"/>
+          <line x1="10" y1="12" x2="26" y2="12" class="rung rung-g"/>
+          <line x1="8" y1="20" x2="28" y2="20" class="rung rung-t"/>
+          <line x1="10" y1="28" x2="26" y2="28" class="rung rung-c"/>
+          <line x1="7" y1="34" x2="29" y2="34" class="rung rung-a"/>
+        </g>
+      </svg>
+    </div>
     <div>
       <h1>Aaron's Archive</h1>
       <div class="brand-sub">DNA Analysis Engine · v3.2</div>
@@ -383,7 +552,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
 ════════════════════════════════════════════ -->
 <div id="tool-single" class="tool-section active">
 <div class="layout">
-  <aside class="input-panel">
+  <aside class="input-panel glass-sheen">
     <div class="panel-hd">
       <span>⬡ Sequence Input</span>
       <span id="seqTypeLabel" style="color:var(--green);font-size:0.54rem;font-family:'IBM Plex Mono',monospace"></span>
@@ -417,7 +586,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
     </div>
   </aside>
   <div class="right-panel" id="rightPanel">
-    <div class="empty-state">
+    <div class="empty-state glass-sheen">
       <div class="empty-icon">🔬</div>
       <div class="empty-title">Paste a sequence to begin</div>
       <div class="empty-sub">Supports DNA · RNA · Protein<br>All algorithms run locally — no data is sent to any server<br><br><span style="color:var(--amber)">?</span> button (bottom-right) explains every term and chart</div>
@@ -431,7 +600,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
 ════════════════════════════════════════════ -->
 <div id="tool-batch" class="tool-section">
 <div class="layout">
-  <aside class="input-panel">
+  <aside class="input-panel glass-sheen">
     <div class="panel-hd"><span>⊞ Multi-FASTA</span></div>
     <div class="panel-body">
       <div class="field">
@@ -447,7 +616,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
     </div>
   </aside>
   <div id="batchResults">
-    <div class="empty-state"><div class="empty-icon">⊞</div><div class="empty-title">Batch Analysis</div><div class="empty-sub">Analyze multiple sequences at once and compare them in a table</div></div>
+    <div class="empty-state glass-sheen"><div class="empty-icon">⊞</div><div class="empty-title">Batch Analysis</div><div class="empty-sub">Analyze multiple sequences at once and compare them in a table</div></div>
   </div>
 </div>
 </div>
@@ -457,7 +626,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
 ════════════════════════════════════════════ -->
 <div id="tool-align" class="tool-section">
 <div class="layout">
-  <aside class="input-panel">
+  <aside class="input-panel glass-sheen">
     <div class="panel-hd"><span>⇌ Pairwise Alignment</span></div>
     <div class="panel-body">
       <div class="field">
@@ -484,7 +653,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
     </div>
   </aside>
   <div id="alignResults">
-    <div class="empty-state"><div class="empty-icon">⇌</div><div class="empty-title">Pairwise Alignment</div><div class="empty-sub">Compare two sequences to find similarities and differences</div></div>
+    <div class="empty-state glass-sheen"><div class="empty-icon">⇌</div><div class="empty-title">Pairwise Alignment</div><div class="empty-sub">Compare two sequences to find similarities and differences</div></div>
   </div>
 </div>
 </div>
@@ -494,7 +663,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
 ════════════════════════════════════════════ -->
 <div id="tool-primers" class="tool-section">
 <div class="layout">
-  <aside class="input-panel">
+  <aside class="input-panel glass-sheen">
     <div class="panel-hd"><span>⌖ Advanced Primer Design</span></div>
     <div class="panel-body">
       <div class="field">
@@ -507,7 +676,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
       </div>
       <button class="btn-run" id="primersBtn" onclick="runPrimers()">⌖ &nbsp;Design Primer Pairs</button>
       <div class="err-box" id="primersErr"></div>
-      <div style="margin-top:12px;padding:11px;background:#020810;border:1px solid var(--border);border-radius:7px;font-size:0.6rem;color:var(--text3);font-family:'IBM Plex Mono',monospace;line-height:2">
+      <div style="margin-top:12px;padding:11px;background:rgba(20,34,48,0.4);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--border2);border-radius:7px;font-size:0.6rem;color:var(--text2);font-family:'IBM Plex Mono',monospace;line-height:2">
         ✓ Tests 4 lengths: 18, 20, 22, 24 bp<br>
         ✓ Hairpin &amp; self-dimer detection<br>
         ✓ Heterodimer (forward+reverse) check<br>
@@ -517,7 +686,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
     </div>
   </aside>
   <div id="primersResults">
-    <div class="empty-state"><div class="empty-icon">⌖</div><div class="empty-title">Advanced Primer Design</div><div class="empty-sub">Finds the best forward + reverse primer pairs for PCR</div></div>
+    <div class="empty-state glass-sheen"><div class="empty-icon">⌖</div><div class="empty-title">Advanced Primer Design</div><div class="empty-sub">Finds the best forward + reverse primer pairs for PCR</div></div>
   </div>
 </div>
 </div>
@@ -527,7 +696,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
 ════════════════════════════════════════════ -->
 <div id="tool-blast" class="tool-section">
 <div class="layout">
-  <aside class="input-panel">
+  <aside class="input-panel glass-sheen">
     <div class="panel-hd"><span>🔍 BLAST via NCBI</span></div>
     <div class="panel-body">
       <div class="field">
@@ -551,7 +720,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
       </div>
       <button class="btn-run" id="blastBtn" onclick="runBlast()">🔍 &nbsp;Submit to NCBI BLAST</button>
       <div class="err-box" id="blastErr"></div>
-      <div style="margin-top:12px;padding:11px;background:#020810;border:1px solid var(--border);border-radius:7px;font-size:0.6rem;color:var(--text3);font-family:'IBM Plex Mono',monospace;line-height:2">
+      <div style="margin-top:12px;padding:11px;background:rgba(20,34,48,0.4);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--border2);border-radius:7px;font-size:0.6rem;color:var(--text2);font-family:'IBM Plex Mono',monospace;line-height:2">
         ⚠ BLAST queries NCBI servers (internet required)<br>
         ⏱ Results take 30–120 seconds<br>
         📏 Shorter sequences (&lt;500 bp) run faster<br>
@@ -560,7 +729,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
     </div>
   </aside>
   <div id="blastResults">
-    <div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">BLAST Search</div>
+    <div class="empty-state glass-sheen"><div class="empty-icon">🔍</div><div class="empty-title">BLAST Search</div>
       <div class="empty-sub">Searches NCBI's database of billions of known sequences to identify what your sequence is, what organism it's from, and what genes are similar to it.<br><br>Requires an internet connection.</div>
     </div>
   </div>
@@ -572,7 +741,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
 ════════════════════════════════════════════ -->
 <div id="tool-phylo" class="tool-section">
 <div class="layout">
-  <aside class="input-panel">
+  <aside class="input-panel glass-sheen">
     <div class="panel-hd"><span>🌿 Phylogenetic Tree</span></div>
     <div class="panel-body">
       <div class="field">
@@ -586,7 +755,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
       </div>
       <button class="btn-run" id="phyloBtn" onclick="runPhylo()">🌿 &nbsp;Build Tree (UPGMA)</button>
       <div class="err-box" id="phyloErr"></div>
-      <div style="margin-top:12px;padding:11px;background:#020810;border:1px solid var(--border);border-radius:7px;font-size:0.6rem;color:var(--text3);font-family:'IBM Plex Mono',monospace;line-height:2">
+      <div style="margin-top:12px;padding:11px;background:rgba(20,34,48,0.4);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--border2);border-radius:7px;font-size:0.6rem;color:var(--text2);font-family:'IBM Plex Mono',monospace;line-height:2">
         🧬 Algorithm: UPGMA (average linkage)<br>
         📏 Distance: p-distance (proportion of differing sites)<br>
         🌿 All computation runs locally, no internet needed<br>
@@ -595,7 +764,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
     </div>
   </aside>
   <div id="phyloResults">
-    <div class="empty-state">
+    <div class="empty-state glass-sheen">
       <div class="empty-icon">🌿</div>
       <div class="empty-title">Phylogenetic Tree</div>
       <div class="empty-sub">Paste 2–50 sequences in FASTA format to build an evolutionary tree using UPGMA clustering.<br><br>Shows sequence relationships, branch lengths, and exportable Newick format.</div>
@@ -609,7 +778,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
 ════════════════════════════════════════════ -->
 <button class="help-btn" onclick="toggleHelp()" title="What does everything mean?">?</button>
 <div class="help-overlay" id="helpOverlay" onclick="closeHelp()"></div>
-<div class="help-panel" id="helpPanel">
+<div class="help-panel glass-sheen" id="helpPanel">
   <div class="help-top">
     <h2>📖 Learn — What does it all mean?</h2>
     <button class="help-close" onclick="closeHelp()">✕</button>
@@ -778,7 +947,7 @@ textarea.seq:focus{border-color:rgba(52,211,153,0.4);box-shadow:0 0 0 3px rgba(5
         </div>
         <div class="help-item">
           <div class="help-term" onclick="toggleTerm(this)">Ramachandran Plot — what it shows</div>
-          <div class="help-def">A plot of every residue's two backbone twist angles — φ (phi, rotation around N–Cα) and ψ (psi, rotation around Cα–C) — which together determine how the protein chain folds at that point. Not every angle combination is physically possible without atoms colliding, so the plot is shaded into <b style="color:#22d3ee">favored</b> (ideal, low-strain), <b style="color:#f0b429">allowed</b> (still reasonable), and unshaded <b style="color:#f87171">outlier</b> regions. This is the same backbone-geometry check structural biologists use (e.g. via MolProbity) to judge whether a solved or predicted structure is trustworthy.<div class="help-eg">&gt;90% of residues in the favored region is typical of a good-quality structure. A high outlier percentage can mean a genuinely flexible loop, an active-site distortion — or a lower-resolution/lower-confidence structure worth double-checking.</div></div>
+          <div class="help-def">A plot of every residue's two backbone twist angles — φ (phi, rotation around N–Cα) and ψ (psi, rotation around Cα–C) — which together determine how the protein chain folds at that point. Not every angle combination is physically possible without atoms colliding, so the plot is shaded into <b style="color:#52ecff">favored</b> (ideal, low-strain), <b style="color:#ffc94d">allowed</b> (still reasonable), and unshaded <b style="color:#ff9494">outlier</b> regions. This is the same backbone-geometry check structural biologists use (e.g. via MolProbity) to judge whether a solved or predicted structure is trustworthy.<div class="help-eg">&gt;90% of residues in the favored region is typical of a good-quality structure. A high outlier percentage can mean a genuinely flexible loop, an active-site distortion — or a lower-resolution/lower-confidence structure worth double-checking.</div></div>
         </div>
         <div class="help-item">
           <div class="help-term" onclick="toggleTerm(this)">3D Structure Viewer (AlphaFold &amp; PDB)</div>
@@ -830,7 +999,7 @@ const SAMPLES = {
   insulin: 'ATGGCCCTGTGGATGCGCCTCCTGCCCCTGCTGGCGCTGCTGGCCCTCTGGGGACCTGACCCAGCCGCAGCCTTTGTGAACCAACACCTGTGCGGCTCACACCTGGTGGAAGCTCTCTACCTAGTGTGCGGGGAACGAGGCTTCTTCTACACACCCAAGACCCGCCGGGAGGCAGAGGACCTGCAGGTGGGGCAGGTGGAGCTGGGCGGCGGCCCTGGTGCAGGCAGCCTGCAGCCCTTGGCCCTGGAG',
   brca1:   'ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAATGCTATGCAGAAAATCTTAGAGTGTCCTGAATTATTTGAATGTGTGTCAACTGGACAATACAGAGAAGCTATGTCTATGTGATGAGAAATTTCAAACAGGCAAATGAAGATCAAAGAGTTCATGGCTTACTCTGGGCAGCTATCTTTTAATATAATAAATGAAAATGTTATAAATTTTGATTGTGATTTTTGG',
   protein: 'MTEYKLVVVGAGGVGKSALTIQLIQNHFVDEYDPTIEDSY',
-  rna:     'AUGGCCUCGUGGAUGCGCCUCCUGCCCAUGCUGGCGCUGCUGGCCCUCUGGGGACCUGACCCAGCCGCAGCCUUUGUGAACCAACACCTGUGCGGCUCACACCUGGUGGA'
+  rna:     'AUGGCCUCGUGGAUGCGCCUCCUGCCCAUGCUGGCGCUGCUGGCCCUCUGGGGACCUGACCCAGCCGCAGCCUUUGUGAACCAACACCUGUGCGGCUCACACCUGGUGGA'
 };
 
 function loadSample(k, toBlast=false, db=null) {
@@ -838,9 +1007,21 @@ function loadSample(k, toBlast=false, db=null) {
   const id = toBlast ? 'blastInput' : 'seqInput';
   document.getElementById(id).value = v;
   if (!toBlast) updateTypeLabel(v);
-  if (toBlast && db) {
+  if (toBlast) {
     const dbEl = document.getElementById('blastDb');
-    if (dbEl) { dbEl.value = db; updateDbSpeedHint(); }
+    if (dbEl) {
+      // Setting .value programmatically (right above) never fires a native
+      // 'input' event, so a listener-based sync never runs for these
+      // sample buttons — this was the actual reason the database dropdown
+      // kept going stale: clicking "TP53 DNA" right after "KRAS protein"
+      // left "RefSeq Protein" selected, silently pairing blastn with a
+      // protein-only database. Always resolve the correct database here,
+      // at the one place that actually changes the sequence — explicit db
+      // argument wins when given (KRAS protein sample), otherwise detect
+      // it from the sequence that was just loaded.
+      dbEl.value = db || (guessBlastSeqIsProtein(v) ? 'refseq_protein' : 'nt');
+      updateDbSpeedHint();
+    }
   }
 }
 
@@ -870,6 +1051,38 @@ function updateDbSpeedHint() {
   hint.textContent = SPEED[db.value] || '';
 }
 updateDbSpeedHint();
+
+// Mirrors the backend's detect_type() letter-set check (see _PROTEIN_EXCLUSIVE
+// in app.py) — just enough to know DNA/RNA vs PROTEIN for keeping the BLAST
+// database dropdown in sync with whatever's actually pasted in the box.
+const _NT_DBS = new Set(['nt','refseq_rna','refseq_genomic']);
+const _PROT_DBS = new Set(['nr','refseq_protein','swissprot','pdb']);
+const _PROT_EXCLUSIVE_LETTERS = new Set(['E','F','I','L','P','Q']);
+function guessBlastSeqIsProtein(s) {
+  const letters = new Set((s||'').toUpperCase().replace(/[^A-Z]/g,''));
+  for (const ch of letters) if (_PROT_EXCLUSIVE_LETTERS.has(ch)) return true;
+  return false;
+}
+function syncBlastDbToSequence() {
+  const ta = document.getElementById('blastInput');
+  const db = document.getElementById('blastDb');
+  if (!ta || !db || !ta.value.trim()) return;
+  const isProtein = guessBlastSeqIsProtein(ta.value);
+  // Only step in when the current selection is actually the WRONG kind for
+  // what's now in the box — e.g. "refseq_protein" left selected from an
+  // earlier protein search when a DNA sequence gets pasted in next. This
+  // exact mismatch (PROGRAM=blastn + DATABASE=refseq_protein) is what was
+  // producing the wildly inflated "first check" wait — NCBI doesn't cleanly
+  // reject an invalid program/database pairing, it just behaves strangely.
+  if (isProtein && _NT_DBS.has(db.value)) {
+    db.value = 'refseq_protein';
+    updateDbSpeedHint();
+  } else if (!isProtein && _PROT_DBS.has(db.value)) {
+    db.value = 'nt';
+    updateDbSpeedHint();
+  }
+}
+document.getElementById('blastInput')?.addEventListener('input', syncBlastDbToSequence);
 
 // ── TOOL SWITCHING ────────────────────────────
 function switchTool(name) {
@@ -913,14 +1126,147 @@ function filterHelp(q){
 
 // ── CHART MANAGEMENT ─────────────────────────
 let CH={};
+if(window.Chart){
+  // CONFIRMED via a real headless-browser reproduction (not a guess): entrance
+  // animations on charts that get frequently destroyed-and-rebuilt (every tab
+  // switch, in this app) can throw inside Chart.js's *shared, global*
+  // animation tick loop ("this._fn is not a function"). That loop's
+  // requestAnimationFrame callback has no error handling, so one uncaught
+  // throw permanently stops it for the entire page — every chart's hover
+  // animation after that point included, which is consistent with tooltips
+  // observed stuck at partial opacity instead of fully appearing. Disabling
+  // entrance/update animations removes the condition that triggers it
+  // entirely, for a data tool where instant rendering is a fine trade anyway.
+  Chart.defaults.animation=false;
+  Chart.defaults.elements.arc.hoverOffset=6;
+  Chart.defaults.elements.bar.borderRadius=4;
+  Chart.defaults.elements.bar.borderSkipped=false;
+}
 function destroyCharts(){ Object.values(CH).forEach(c=>{try{c.destroy()}catch(e){}});CH={}; }
-function mkAxis(extra={}){return{ticks:{color:'#3a5f70',font:{family:"'IBM Plex Mono'",size:9},...(extra.ticks||{})},grid:{color:'rgba(23,38,48,0.9)'},...extra};}
-function mkLegend(show=false){return{display:show,labels:{color:'#6b96a8',font:{family:"'IBM Plex Mono'",size:10}}};}
+// A hand-rolled "already created?" cache (the old CH[id] guard pattern) can
+// desync from reality — stale entries after a fresh analysis, charts baked
+// at 0×0 while their tab was hidden, etc. — and each desync produces a
+// permanently-blank chart. killChart() sidesteps all of that by asking the
+// canvas itself (via Chart.js's own registry) whether it already owns a
+// chart, and destroying it if so. Every chart constructor below calls this
+// immediately before creating a fresh instance, so "already exists" is
+// never trusted from our own bookkeeping — only from the DOM/Chart.js truth.
+function killChart(canvas){
+  if(!canvas) return;
+  try{
+    const existing=(window.Chart&&Chart.getChart)?Chart.getChart(canvas):null;
+    if(existing){
+      for(const k in CH){ if(CH[k]===existing) delete CH[k]; }
+      // CONFIRMED ROOT CAUSE (reproduced with a real headless-browser test,
+      // stack trace captured): Chart.js runs ONE shared, global animation
+      // loop across every chart on the page. If a chart is destroy()'d
+      // while its own entrance animation is still mid-flight — which is
+      // exactly what happens when a tab is switched again quickly, since
+      // every chart in this app animates in — the global loop can throw
+      // "this._fn is not a function" on its next tick, because it still
+      // holds a reference into the chart that just got torn down. Because
+      // that loop is shared, this doesn't just break the one chart: it can
+      // silently corrupt the *global* animator for the rest of the page,
+      // which is consistent with tooltips getting stuck fading in (opacity
+      // observed stuck at 0.35 / 0.7, never reaching 1) instead of fully
+      // appearing on hover afterward. stop() cancels this chart's animation
+      // cleanly before destroy() ever runs, so the shared loop never trips.
+      existing.stop();
+      existing.destroy();
+    }
+    // Belt-and-suspenders: if a chart was ever built while this canvas was
+    // 0×0 (hidden tab), Chart.js may leave stale width/height attributes
+    // behind even after destroy(). A fresh Chart instance created on a
+    // canvas with stale bitmap dimensions can visually stretch to fit its
+    // box (via CSS) while its *internal* coordinate system stays wrong —
+    // which is exactly the kind of bug that makes hover/tooltips silently
+    // miss even though the chart looks fine. Force a clean slate.
+    canvas.removeAttribute('width');
+    canvas.removeAttribute('height');
+    canvas.style.width='';
+    canvas.style.height='';
+  }catch(e){}
+}
+// THE CORE INVARIANT: a chart must only ever be built (or rebuilt) while
+// its canvas has real, non-zero rendered size — never while hidden/0×0.
+//
+// A plain synchronous "is it visible right now?" check (offsetParent!==null)
+// turned out to be the wrong tool here: it has a "check once, then give up
+// forever" failure mode. If that check runs a moment before the browser has
+// actually finished laying out a big freshly-inserted DOM tree — which is
+// exactly what happens right after results are rendered — a chart that
+// *should* be visible can still read as not-yet-visible at that instant,
+// get silently skipped, and then never get another chance to build itself
+// until something else (like a tab click) happens to call renderCharts()
+// again. That's why GC Content could stay blank on the very first,
+// already-active tab.
+//
+// whenCanvasVisible() fixes this properly with ResizeObserver, which reacts
+// to the real event (an element actually gaining size) instead of guessing
+// at the right synchronous moment to check. If the canvas already has size,
+// it builds immediately; if not, it waits — however long that takes — and
+// builds the instant it does. A chart can never be permanently skipped.
+const _pendingChartObservers = new WeakMap();
+function whenCanvasVisible(canvas, build){
+  if(!canvas) return;
+  if(canvas.offsetWidth>0 && canvas.offsetHeight>0){
+    const existing=_pendingChartObservers.get(canvas);
+    if(existing){ existing.disconnect(); _pendingChartObservers.delete(canvas); }
+    build();
+    return;
+  }
+  if(_pendingChartObservers.has(canvas)) return; // already waiting on this one
+  if(!window.ResizeObserver){ build(); return; } // ancient-browser fallback
+  const ro=new ResizeObserver(()=>{
+    if(canvas.offsetWidth>0 && canvas.offsetHeight>0){
+      ro.disconnect();
+      _pendingChartObservers.delete(canvas);
+      build();
+    }
+  });
+  _pendingChartObservers.set(canvas, ro);
+  // Watch the wrapper, not the canvas itself — a width:100% canvas inside a
+  // display:none ancestor reports 0 until the ancestor's box exists at all,
+  // and observing the parent catches that display:none→block transition.
+  ro.observe(canvas.parentElement || canvas);
+}
+function mkAxis(extra={}){return{ticks:{color:'#7ba3c0',font:{family:"'IBM Plex Mono'",size:9},...(extra.ticks||{})},grid:{color:'rgba(120,160,190,0.14)'},border:{color:'#2e4a60'},...extra};}
+function mkLegend(show=false){return{display:show,labels:{color:'#a8cbe0',font:{family:"'IBM Plex Mono'",size:10}}};}
+function mkTooltip(){return{backgroundColor:'rgba(14,24,34,0.94)',titleColor:'#eef7fb',bodyColor:'#a8cbe0',
+  borderColor:'rgba(120,160,190,0.35)',borderWidth:1,padding:11,cornerRadius:10,titleFont:{family:"'IBM Plex Mono'",size:10,weight:'600'},
+  bodyFont:{family:"'IBM Plex Mono'",size:10},displayColors:false,caretSize:6,titleMarginBottom:6}}
+function mkGradient(ctx,color){
+  const g=ctx.createLinearGradient(0,0,0,ctx.canvas.height||160);
+  g.addColorStop(0,color.replace(')',',0.4)').replace('rgb','rgba'));
+  g.addColorStop(0.65,color.replace(')',',0.08)').replace('rgb','rgba'));
+  g.addColorStop(1,color.replace(')',',0)').replace('rgb','rgba'));
+  return g;
+}
 function mkLine(id,data,xk,yk,label,color,fill,yExtra={}){
-  const ctx=document.getElementById(id);
-  if(!ctx||CH[id]||!data||!data.length)return;
-  CH[id]=new Chart(ctx,{type:'line',data:{labels:data.map(p=>p[xk]),datasets:[{label,data:data.map(p=>p[yk]),borderColor:color,backgroundColor:fill,borderWidth:1.5,pointRadius:0,fill:true,tension:0.4}]},
-    options:{scales:{x:{...mkAxis({ticks:{maxTicksLimit:8}}),},y:{...mkAxis(),...yExtra}},plugins:{legend:mkLegend()}}});
+  const canvas=document.getElementById(id);
+  if(!canvas||!data||!data.length)return;
+  whenCanvasVisible(canvas, ()=>{
+  killChart(canvas);
+  const ctx=canvas.getContext('2d');
+  let gradFill=fill;
+  try{ gradFill=mkGradient(ctx,color.startsWith('#')?hexToRgb(color):color); }catch(e){}
+  try{
+    CH[id]=new Chart(canvas,{type:'line',data:{labels:data.map(p=>p[xk]),datasets:[{label,data:data.map(p=>p[yk]),
+      borderColor:color,backgroundColor:gradFill,borderWidth:2.5,pointRadius:0,pointHoverRadius:5.5,
+      pointHoverBackgroundColor:color,pointHoverBorderColor:'#0c1620',pointHoverBorderWidth:2.5,
+      borderCapStyle:'round',borderJoinStyle:'round',
+      fill:true,tension:0.4}]},
+      options:{maintainAspectRatio:false,responsive:true,interaction:{mode:'index',intersect:false},
+        animation:false,
+        scales:{x:{...mkAxis({ticks:{maxTicksLimit:8}}),},y:{...mkAxis(),...yExtra}},
+      plugins:{legend:mkLegend(),tooltip:mkTooltip()}}});
+    CH[id].resize(); // final safety belt: force a fresh size read right after construction
+  }catch(e){ console.error('[chart] failed to build "'+id+'":', e); }
+  });
+}
+function hexToRgb(hex){
+  const n=parseInt(hex.slice(1),16);
+  return `rgb(${(n>>16)&255},${(n>>8)&255},${n&255})`;
 }
 
 // ── TOOL 1: SINGLE SEQUENCE ───────────────────
@@ -940,7 +1286,7 @@ async function runAnalyze(){
     if(!res.ok)throw new Error(d.error||'Analysis failed');
     renderResults(d,rp);
   }catch(e){
-    rp.innerHTML='<div class="empty-state"><div class="empty-icon">⚠</div><div class="empty-title">Error</div><div class="empty-sub">'+escHtml(e.message)+'</div></div>';
+    rp.innerHTML='<div class="empty-state glass-sheen"><div class="empty-icon">⚠</div><div class="empty-title">Error</div><div class="empty-sub">'+escHtml(e.message)+'</div></div>';
     showErr('errMsg',e.message);
   }finally{btn.disabled=false;btn.textContent='▶  Run Deep Analysis';}
 }
@@ -950,6 +1296,28 @@ function hideErr(id){const el=document.getElementById(id);if(el)el.classList.rem
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 // ── RENDER RESULTS ────────────────────────────
+function animateStatTiles(container){
+  const vals = container.querySelectorAll('.tile-val');
+  vals.forEach((el,i)=>{
+    const raw = el.childNodes[0];
+    if(!raw || raw.nodeType!==3) return;
+    const text = raw.textContent;
+    const m = text.match(/^-?\d+(\.\d+)?/);
+    if(!m) return;
+    const target = parseFloat(m[0]);
+    const decimals = (m[0].split('.')[1]||'').length;
+    const start = performance.now(), dur = 650 + i*45;
+    raw.textContent = (0).toFixed(decimals);
+    function tick(now){
+      const p = Math.min(1,(now-start)/dur);
+      const eased = 1-Math.pow(1-p,3);
+      raw.textContent = (target*eased).toFixed(decimals);
+      if(p<1) requestAnimationFrame(tick);
+      else raw.textContent = m[0];
+    }
+    requestAnimationFrame(tick);
+  });
+}
 function renderResults(d,container){
   container.innerHTML='';
   const isDNA=d.type==='DNA'||d.type==='RNA';
@@ -984,16 +1352,23 @@ function renderResults(d,container){
       <div class="stat-tile"><div class="tile-lbl">Net Charge pH 7</div><div class="tile-val ${d.charge_at_7>0?'vc':'vr'}">${d.charge_at_7}</div></div>
       <div class="stat-tile"><div class="tile-lbl">TM Helices</div><div class="tile-val va">${(d.tm_helices||[]).length}</div><div class="tile-sub">Membrane spans</div></div>
       <div class="stat-tile"><div class="tile-lbl">Signal Peptide</div><div class="tile-val ${d.signal_peptide&&d.signal_peptide.detected?'vg':'vr'}">${d.signal_peptide&&d.signal_peptide.detected?'YES':'NO'}</div></div>`;
+  }else{
+    tiles.innerHTML=`<div class="empty-state glass-sheen" style="grid-column:1/-1">
+      <div class="empty-icon">🧬</div>
+      <div class="empty-title">Sequence type not recognized</div>
+      <div class="empty-sub">This ${d.length?d.length.toLocaleString()+'-character ':''}sequence contains a mix of characters that don't cleanly match DNA, RNA, or protein.<br>
+      This usually means a typo or a stray character — for DNA/RNA, check for accidental mixing of T and U; for protein, check for non-standard letters.</div>
+    </div>`;
   }
   container.appendChild(tiles);
-
-  // Tabs
+  animateStatTiles(tiles);
   const wrap=document.createElement('div'); wrap.className='tabs-wrap';
   const tabBar=document.createElement('div'); tabBar.className='tab-bar';
   let defs=[];
   if(isDNA) defs=[{id:'overview',lb:'01 Composition'},{id:'skew',lb:'02 Skew'},{id:'orfs',lb:'03 ORFs'},{id:'restrict',lb:'04 Restriction'},{id:'features',lb:'05 Features'},{id:'codons',lb:'06 Codons'},{id:'thermo',lb:'07 Thermo'},{id:'primers',lb:'08 Primers'}];
-  else defs=[{id:'prot_ov',lb:'01 Overview'},{id:'prot_hydro',lb:'02 Hydrophobicity'},{id:'prot_charge',lb:'03 Charge / pH'},{id:'prot_comp',lb:'04 Composition'}];
+  else if(isProt) defs=[{id:'prot_ov',lb:'01 Overview'},{id:'prot_hydro',lb:'02 Hydrophobicity'},{id:'prot_charge',lb:'03 Charge / pH'},{id:'prot_comp',lb:'04 Composition'}];
   if(d.ai_analysis) defs.push({id:'ai',lb:'✦ AI'});
+  if(!defs.length){ return; }
 
   defs.forEach((t,i)=>{
     const btn=document.createElement('div');
@@ -1002,7 +1377,15 @@ function renderResults(d,container){
       tabBar.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
       wrap.querySelectorAll('.tab-content').forEach(x=>x.classList.remove('active'));
       btn.classList.add('active');
-      const tc=wrap.querySelector('#tc-'+t.id); if(tc) tc.classList.add('active');
+      const tc=wrap.querySelector('#tc-'+t.id);
+      if(tc) tc.classList.add('active');
+      // renderCharts() routes every chart through whenCanvasVisible(), so
+      // this call is always safe: it only actually builds charts in the
+      // tab that just became visible. Charts in tabs being left behind
+      // are already-built and untouched; charts not yet visible anywhere
+      // will build themselves automatically the moment they are, with or
+      // without this call. This 40ms delay is just to let the tab-switch
+      // paint settle before Chart.js measures anything.
       setTimeout(()=>renderCharts(d),40);
     };
     tabBar.appendChild(btn);
@@ -1029,7 +1412,7 @@ function renderResults(d,container){
   if(d.ai_analysis){
     const t=mkTC('ai',false);
     const modelBadge = d.ai_model
-      ? `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;background:rgba(240,180,41,0.1);border:1px solid rgba(240,180,41,0.3);border-radius:20px;font-size:0.58rem;font-family:'IBM Plex Mono',monospace;color:var(--amber);margin-bottom:14px">⚡ ${escHtml(d.ai_model)}</span>`
+      ? `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;background:rgba(255,201,77,0.1);border:1px solid rgba(255,201,77,0.3);border-radius:20px;font-size:0.58rem;font-family:'IBM Plex Mono',monospace;color:var(--amber);margin-bottom:14px">⚡ ${escHtml(d.ai_model)}</span>`
       : '';
     // Format response: convert numbered sections and newlines to readable HTML
     const formatted = escHtml(d.ai_analysis)
@@ -1050,7 +1433,7 @@ function renderResults(d,container){
 
   // Export bar
   const exp=document.createElement('div'); exp.className='export-bar';
-  exp.innerHTML='<button class="export-btn" onclick="exportPDF()">⬇ PDF Report</button><button class="export-btn blue" onclick="exportCSV()">⬇ CSV</button>';
+  exp.innerHTML='<button class="export-btn" id="exportPdfBtn" onclick="exportPDF()">⬇ PDF Report</button><button class="export-btn blue" onclick="exportCSV()">⬇ CSV</button>';
   container.appendChild(exp);
   window._last=d;
   setTimeout(()=>renderCharts(d),60);
@@ -1062,7 +1445,7 @@ function buildOverviewTab(d,mkTC){
   t.innerHTML=`
     <div class="sec-head">Nucleotide Composition</div>
     <div style="display:grid;grid-template-columns:170px 1fr;gap:14px;margin-bottom:14px;align-items:center">
-      <div class="chart-box" style="margin:0"><canvas id="chartBase" height="170"></canvas></div>
+      <div class="chart-box" style="margin:0"><div class="chart-frame" style="height:200px"><canvas id="chartBase"></canvas></div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         ${[['A','Adenine','vc'],['T','Thymine','vg'],['G','Guanine','va'],['C','Cytosine','vp']].map(([b,n,c])=>`
         <div class="stat-tile"><div class="tile-lbl">${n}</div><div class="tile-val ${c}" style="font-size:1.2rem">${s.counts[b]}</div><div class="tile-sub">${((s.counts[b]/s.length)*100).toFixed(1)}%</div></div>`).join('')}
@@ -1071,9 +1454,9 @@ function buildOverviewTab(d,mkTC){
       </div>
     </div>
     <div class="sec-head">GC Content Sliding Window (100 bp)</div>
-    <div class="chart-box"><canvas id="chartGC" height="130"></canvas></div>
+    <div class="chart-box"><div class="chart-frame" style="height:340px"><canvas id="chartGC"></canvas></div></div>
     <div class="sec-head" style="margin-top:4px">Dinucleotide Frequencies <span style="color:var(--text3);font-size:0.56rem;font-weight:400;font-family:monospace">— purple bar = CG (CpG methylation site)</span></div>
-    <div class="chart-box"><canvas id="chartDi" height="120"></canvas></div>
+    <div class="chart-box"><div class="chart-frame" style="height:280px"><canvas id="chartDi"></canvas></div></div>
     <div class="sec-head" style="margin-top:4px">Strands</div>
     <div style="font-size:0.54rem;color:var(--text3);font-family:'IBM Plex Mono',monospace;margin-bottom:3px;letter-spacing:0.12em">COMPLEMENT (5'→3')</div>
     <div class="seq-display" style="color:var(--cyan)">${d.complement}${d.complement.length>=100?'…':''}</div>
@@ -1095,18 +1478,18 @@ function buildSkewTab(d,mkTC){
   t.innerHTML=`
     <div class="sec-head">GC Skew — (G−C)/(G+C) per window</div>
     <div style="font-size:0.7rem;color:var(--text3);margin-bottom:9px;line-height:1.65">Positive value = more G than C on this strand. The pattern reverses at bacterial replication origins, making this useful to locate where DNA replication begins and ends.</div>
-    <div class="chart-box"><canvas id="chartGCSkew" height="130"></canvas></div>
+    <div class="chart-box"><div class="chart-frame" style="height:340px"><canvas id="chartGCSkew"></canvas></div></div>
     <div class="sec-head" style="margin-top:4px">AT Skew — (A−T)/(A+T) per window</div>
-    <div class="chart-box"><canvas id="chartATSkew" height="130"></canvas></div>
+    <div class="chart-box"><div class="chart-frame" style="height:340px"><canvas id="chartATSkew"></canvas></div></div>
     <div class="sec-head" style="margin-top:4px">Cumulative GC Skew</div>
     <div style="font-size:0.7rem;color:var(--text3);margin-bottom:9px;line-height:1.65">Running sum of GC skew along the sequence. In circular bacterial genomes: minimum = replication terminus, maximum = replication origin.</div>
-    <div class="chart-box"><canvas id="chartCumSkew" height="130"></canvas></div>`;
+    <div class="chart-box"><div class="chart-frame" style="height:340px"><canvas id="chartCumSkew"></canvas></div></div>`;
   return t;
 }
 
 function buildORFTab(d,mkTC){
   const t=mkTC('orfs',false);
-  const cols=['rgba(52,211,153','rgba(34,211,238','rgba(240,180,41','rgba(192,132,252','rgba(248,113,113','rgba(244,114,182'];
+  const cols=['rgba(76,240,180','rgba(82,236,255','rgba(255,201,77','rgba(219,166,255','rgba(255,148,148','rgba(244,114,182'];
   let lanes='';
   d.orfs.slice(0,20).forEach((o,i)=>{
     const l=(o.start/d.length*100).toFixed(2);
@@ -1180,7 +1563,7 @@ function buildFeaturesTab(d,mkTC){
         <div class="sec-head" style="margin-top:12px">Palindromic Sites</div>
         <table class="data-table"><thead><tr><th>Pos</th><th>Sequence</th><th>Len</th></tr></thead><tbody>${palRows||'<tr><td colspan="3" style="color:var(--text3)">None found</td></tr>'}</tbody></table>
         ${rna?`<div class="sec-head" style="margin-top:12px">RNA Secondary Structure (Nussinov)</div>
-        <div style="background:#020810;border:1px solid var(--border);border-radius:7px;padding:11px;font-family:'IBM Plex Mono',monospace;font-size:0.65rem">
+        <div style="background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none;border:1px solid var(--border);border-radius:7px;padding:11px;font-family:'IBM Plex Mono',monospace;font-size:0.65rem">
           <div style="color:var(--green);word-break:break-all;line-height:2">${rna.sequence||''}</div>
           <div style="color:var(--amber);word-break:break-all;line-height:2">${rna.structure||''}</div>
           <div style="color:var(--text3);margin-top:5px">Base pairs: ${rna.base_pairs||rna.pairs||0} · Approx MFE: ${rna.mfe_approx||rna.energy||'?'} kcal/mol</div>
@@ -1198,15 +1581,45 @@ function buildCodonsTab(d,mkTC){
     const frac=v.count/maxC;
     const r=Math.round(240*frac),g=Math.round(180*frac),b=Math.round(41*frac);
     const tc=frac>0.45?'#fff':'#6b96a8';
-    return `<div class="codon-cell" style="background:rgba(${r},${g},${b},${0.12+frac*0.72})" title="${cod}=${v.aa}: ${v.count}×"><div class="cod" style="color:${tc}">${cod}</div><div class="cnt" style="color:${tc}">${v.count}</div></div>`;
+    return `<div class="codon-cell" style="background:rgba(${r},${g},${b},${0.12+frac*0.72})" data-codon="${cod}" data-aa="${v.aa}" data-count="${v.count}"><div class="cod" style="color:${tc}">${cod}</div><div class="cnt" style="color:${tc}">${v.count}</div></div>`;
   }).join('');
   t.innerHTML=`
     <div class="sec-head">Top 20 Most Used Codons</div>
-    <div class="chart-box"><canvas id="chartCodon" height="150"></canvas></div>
+    <div class="chart-box"><div class="chart-frame" style="height:320px"><canvas id="chartCodon"></canvas></div></div>
     <div class="sec-head" style="margin-top:4px">Full Codon Heatmap (all 64) — brighter = more frequent</div>
     <div style="font-size:0.68rem;color:var(--text3);margin-bottom:6px">Hover over any cell to see codon, amino acid, and count</div>
     <div class="codon-grid">${cells}</div>`;
+  wireCellTooltips(t);
   return t;
+}
+// Shared floating tooltip for non-Chart.js hover targets (the codon
+// heatmap grid). One element, reused and repositioned on mousemove,
+// styled to match Chart.js's own tooltip so hover feels consistent
+// everywhere in the app rather than falling back to the browser's slow,
+// unstyled native title-attribute tooltip.
+let _cellTip=null;
+function wireCellTooltips(root){
+  if(!_cellTip){
+    _cellTip=document.createElement('div');
+    _cellTip.className='cell-tooltip';
+    document.body.appendChild(_cellTip);
+  }
+  root.querySelectorAll('.codon-cell').forEach(cell=>{
+    cell.addEventListener('mouseenter',()=>{
+      _cellTip.innerHTML=`<b>${cell.dataset.codon}</b> = ${cell.dataset.aa} &nbsp;·&nbsp; ${cell.dataset.count}×`;
+      _cellTip.classList.add('show');
+    });
+    cell.addEventListener('mousemove',e=>{
+      const pad=14;
+      let x=e.clientX+pad, y=e.clientY+pad;
+      const tw=_cellTip.offsetWidth, th=_cellTip.offsetHeight;
+      if(x+tw>window.innerWidth-8) x=e.clientX-tw-pad;
+      if(y+th>window.innerHeight-8) y=e.clientY-th-pad;
+      _cellTip.style.left=x+'px';
+      _cellTip.style.top=y+'px';
+    });
+    cell.addEventListener('mouseleave',()=>{ _cellTip.classList.remove('show'); });
+  });
 }
 
 function buildThermoTab(d,mkTC){
@@ -1216,7 +1629,7 @@ function buildThermoTab(d,mkTC){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
       <div>
         <div class="sec-head">Melting Curve (simulated)</div>
-        <div class="chart-box"><canvas id="chartMelt" height="170"></canvas></div>
+        <div class="chart-box"><div class="chart-frame" style="height:340px"><canvas id="chartMelt"></canvas></div></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <div class="stat-tile"><div class="tile-lbl">Wallace Rule</div><div class="tile-val va">${m.wallace}<span style="font-size:0.75rem">°C</span></div><div class="tile-sub">Quick formula</div></div>
           <div class="stat-tile"><div class="tile-lbl">Nearest-Neighbor</div><div class="tile-val vr">${m.nearest_neighbor}<span style="font-size:0.75rem">°C</span></div><div class="tile-sub">More accurate</div></div>
@@ -1224,7 +1637,7 @@ function buildThermoTab(d,mkTC){
       </div>
       <div>
         <div class="sec-head">Sequence Complexity</div>
-        <div class="chart-box"><canvas id="chartEntropy" height="170"></canvas></div>
+        <div class="chart-box"><div class="chart-frame" style="height:340px"><canvas id="chartEntropy"></canvas></div></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <div class="stat-tile"><div class="tile-lbl">Shannon Entropy</div><div class="tile-val vc">${en.entropy}</div><div class="tile-sub">bits/symbol</div></div>
           <div class="stat-tile"><div class="tile-lbl">Complexity %</div><div class="tile-val vpk">${en.complexity_pct}<span style="font-size:0.75rem">%</span></div><div class="tile-sub">of theoretical max</div></div>
@@ -1268,7 +1681,7 @@ function buildPrimersTab(d,mkTC){
       <span class="badge bg">PCR Product: ${p.product_size||'?'} bp</span>
       <span class="badge ba">ΔTm: ${Math.abs((f.tm||0)-(rv.tm||0)).toFixed(1)}°C</span>
     </div>
-    <div style="padding:12px;background:rgba(240,180,41,0.04);border:1px solid rgba(240,180,41,0.14);border-radius:7px;font-size:0.7rem;color:var(--text2);line-height:1.75">
+    <div style="padding:12px;background:rgba(255,201,77,0.04);border:1px solid rgba(255,201,77,0.14);border-radius:7px;font-size:0.7rem;color:var(--text2);line-height:1.75">
       💡 <b style="color:var(--amber)">Tip:</b> This is a quick basic primer. For more options tested across lengths 18–24 bp with full hairpin/dimer checking, use the <b>Advanced Primers</b> tool (top navigation bar).
     </div>`;
   return t;
@@ -1280,7 +1693,7 @@ function buildProtOvTab(d,mkTC){
   const tmRows=(d.tm_helices||[]).map((h,i)=>`<tr><td style="color:var(--amber)">Helix ${i+1}</td><td>${h.start}</td><td>${h.end}</td><td>${h.length} aa</td></tr>`).join('');
   t.innerHTML=`
     <div style="display:grid;grid-template-columns:160px 1fr;gap:14px;margin-bottom:14px;align-items:center">
-      <div class="chart-box" style="margin:0"><canvas id="chartSecStr" height="160"></canvas></div>
+      <div class="chart-box" style="margin:0"><div class="chart-frame" style="height:260px"><canvas id="chartSecStr"></canvas></div></div>
       <div>
         <div class="sec-head">Structure Prediction (Chou-Fasman)</div>
         <div class="stat-tile" style="margin-bottom:8px">
@@ -1288,14 +1701,14 @@ function buildProtOvTab(d,mkTC){
           <div class="tile-val va" style="font-size:0.95rem">${sec.likely||'N/A'}</div>
           <div class="tile-sub">Helix score: ${sec.helix_score} · Sheet score: ${sec.sheet_score}</div>
         </div>
-        ${d.signal_peptide&&d.signal_peptide.detected?`<div style="padding:9px 12px;background:rgba(52,211,153,0.07);border:1px solid rgba(52,211,153,0.18);border-radius:7px;font-size:0.7rem">
+        ${d.signal_peptide&&d.signal_peptide.detected?`<div style="padding:9px 12px;background:rgba(76,240,180,0.07);border:1px solid rgba(76,240,180,0.18);border-radius:7px;font-size:0.7rem">
           <div style="color:var(--green);font-weight:600;margin-bottom:3px">✓ Signal Peptide Detected</div>
           <div style="color:var(--text3)">Residues 1–${d.signal_peptide.length||20}. Protein is likely secreted or membrane-bound.</div>
         </div>`:''}
       </div>
     </div>
     <div class="sec-head">Amino Acid Composition</div>
-    <div class="chart-box"><canvas id="chartAA" height="150"></canvas></div>
+    <div class="chart-box"><div class="chart-frame" style="height:300px"><canvas id="chartAA"></canvas></div></div>
     ${(d.tm_helices||[]).length?`<div class="sec-head" style="margin-top:4px">Transmembrane Helices (${d.tm_helices.length})</div>
     <table class="data-table"><thead><tr><th>Helix #</th><th>Start</th><th>End</th><th>Length</th></tr></thead><tbody>${tmRows}</tbody></table>`:''}`;
   return t;
@@ -1306,7 +1719,7 @@ function buildHydroTab(d,mkTC){
   t.innerHTML=`
     <div class="sec-head">Hydrophobicity Profile (Kyte-Doolittle, window = 9 aa)</div>
     <div style="font-size:0.7rem;color:var(--text3);margin-bottom:9px;line-height:1.65">Regions above the red dashed line (+1.6) for 20+ amino acids in a row = likely transmembrane helices. Below zero = hydrophilic (water-facing) regions.</div>
-    <div class="chart-box"><canvas id="chartHydro" height="190"></canvas></div>
+    <div class="chart-box"><div class="chart-frame" style="height:340px"><canvas id="chartHydro"></canvas></div></div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:4px">
       <div class="stat-tile"><div class="tile-lbl">GRAVY Score</div><div class="tile-val ${d.gravy>0?'vg':'vr'}">${d.gravy}</div></div>
       <div class="stat-tile"><div class="tile-lbl">Character</div><div style="font-size:0.76rem;color:var(--text);margin-top:6px">${d.gravy>1.5?'Strongly hydrophobic — likely membrane protein':d.gravy>0?'Mildly hydrophobic':'Hydrophilic — likely soluble'}</div></div>
@@ -1320,7 +1733,7 @@ function buildChargeTab(d,mkTC){
   t.innerHTML=`
     <div class="sec-head">Net Charge vs pH (0–14)</div>
     <div style="font-size:0.7rem;color:var(--text3);margin-bottom:9px;line-height:1.65">Shows total protein charge across the entire pH range. Where the curve crosses zero = pI (${d.pi}). At body pH 7.4, this protein has a net charge of <b style="color:var(--cyan)">${d.charge_at_7}</b>.</div>
-    <div class="chart-box"><canvas id="chartCharge" height="200"></canvas></div>
+    <div class="chart-box"><div class="chart-frame" style="height:340px"><canvas id="chartCharge"></canvas></div></div>
     <div class="sec-head" style="margin-top:4px">Ionizable Residues (affect the curve)</div>
     <table class="data-table"><thead><tr><th>Residue</th><th>Count in protein</th><th>pKa</th><th>Charge at pH 7.4</th></tr></thead><tbody>
       ${[['Aspartate (D)','D',3.9,'Negative (−1)','vr'],['Glutamate (E)','E',4.1,'Negative (−1)','vr'],
@@ -1348,73 +1761,146 @@ function buildProtCompTab(d,mkTC){
 }
 
 // ── CHART RENDERING ───────────────────────────
+// Every chart below is wrapped in its own try/catch (one bad data shape
+// can never take others down with it) AND routed through
+// whenCanvasVisible() (a chart only ever gets built once its canvas
+// genuinely has size — immediately if already visible, or automatically
+// the moment it becomes visible later, via ResizeObserver). Calling
+// renderCharts() again — e.g. on every tab click — is therefore always
+// safe and cheap: charts that are already correctly built and currently
+// hidden are left completely untouched, and any chart still waiting to
+// be built just gets its callback registered again (deduped internally).
 function renderCharts(d){
   const isDNA=d.type==='DNA'||d.type==='RNA';
   if(isDNA){
-    // Base doughnut
     const bCtx=document.getElementById('chartBase');
-    if(bCtx&&!CH.base){const s=d.stats;
-      CH.base=new Chart(bCtx,{type:'doughnut',data:{labels:['A','T','G','C'],datasets:[{data:[s.counts.A,s.counts.T,s.counts.G,s.counts.C],backgroundColor:['rgba(34,211,238,0.7)','rgba(52,211,153,0.7)','rgba(240,180,41,0.7)','rgba(192,132,252,0.7)'],borderColor:['#22d3ee','#34d399','#f0b429','#c084fc'],borderWidth:1.5}]},options:{plugins:{legend:mkLegend(true)},cutout:'62%'}});}
-    // GC window
-    mkLine('chartGC',d.gc_window,'pos','gc','GC%','#22d3ee','rgba(34,211,238,0.06)',{min:0,max:100});
-    // Skew charts
-    if(d.gc_skew) mkLine('chartGCSkew',d.gc_skew,'pos','skew','GC Skew','#f0b429','rgba(240,180,41,0.06)',{min:-1,max:1});
-    if(d.at_skew) mkLine('chartATSkew',d.at_skew,'pos','skew','AT Skew','#c084fc','rgba(192,132,252,0.06)',{min:-1,max:1});
-    if(d.cumulative_skew) mkLine('chartCumSkew',d.cumulative_skew,'pos','skew','Cumulative GC Skew','#34d399','rgba(52,211,153,0.06)');
-    // Codon
+    if(bCtx) whenCanvasVisible(bCtx, ()=>{ try{
+      const s=d.stats; killChart(bCtx);
+      CH.base=new Chart(bCtx,{type:'doughnut',data:{labels:['A','T','G','C'],datasets:[{data:[s.counts.A,s.counts.T,s.counts.G,s.counts.C],backgroundColor:['rgba(82,236,255,0.7)','rgba(76,240,180,0.7)','rgba(255,201,77,0.7)','rgba(219,166,255,0.7)'],borderColor:['#52ecff','#4cf0b4','#ffc94d','#dba6ff'],borderWidth:1.5}]},options:{maintainAspectRatio:false,responsive:true,plugins:{legend:mkLegend(true),tooltip:mkTooltip()},cutout:'62%'}});
+      CH.base.resize();
+    }catch(e){ console.error('[chart] chartBase failed:', e); } });
+
+    // GC window / skew charts (mkLine handles whenCanvasVisible + try/catch internally)
+    mkLine('chartGC',d.gc_window,'pos','gc','GC%','#52ecff','rgba(82,236,255,0.06)',{min:0,max:100});
+    if(d.gc_skew) mkLine('chartGCSkew',d.gc_skew,'pos','skew','GC Skew','#ffc94d','rgba(255,201,77,0.06)',{min:-1,max:1});
+    if(d.at_skew) mkLine('chartATSkew',d.at_skew,'pos','skew','AT Skew','#dba6ff','rgba(219,166,255,0.06)',{min:-1,max:1});
+    if(d.cumulative_skew) mkLine('chartCumSkew',d.cumulative_skew,'pos','skew','Cumulative GC Skew','#4cf0b4','rgba(76,240,180,0.06)');
+
     const cCtx=document.getElementById('chartCodon');
-    if(cCtx&&!CH.codon){const top20=Object.entries(d.codon_usage||{}).filter(([,v])=>v.aa!=='*').sort((a,b)=>b[1].count-a[1].count).slice(0,20);
-      CH.codon=new Chart(cCtx,{type:'bar',data:{labels:top20.map(([c,v])=>`${c}(${v.aa})`),datasets:[{data:top20.map(([,v])=>v.count),backgroundColor:'rgba(240,180,41,0.28)',borderColor:'#f0b429',borderWidth:1}]},options:{scales:{x:mkAxis({ticks:{font:{size:7}}}),y:mkAxis()},plugins:{legend:mkLegend()}}});}
-    // Dinucleotide
+    if(cCtx) whenCanvasVisible(cCtx, ()=>{ try{
+      const top20=Object.entries(d.codon_usage||{}).filter(([,v])=>v.aa!=='*').sort((a,b)=>b[1].count-a[1].count).slice(0,20); killChart(cCtx);
+      CH.codon=new Chart(cCtx,{type:'bar',data:{labels:top20.map(([c,v])=>`${c}(${v.aa})`),datasets:[{data:top20.map(([,v])=>v.count),backgroundColor:'rgba(255,201,77,0.28)',borderColor:'#ffc94d',borderWidth:1}]},options:{maintainAspectRatio:false,responsive:true,interaction:{mode:'index',intersect:false},scales:{x:mkAxis({ticks:{font:{size:7}}}),y:mkAxis()},plugins:{legend:mkLegend(),tooltip:mkTooltip()}}});
+      CH.codon.resize();
+    }catch(e){ console.error('[chart] chartCodon failed:', e); } });
+
     const diCtx=document.getElementById('chartDi');
-    if(diCtx&&!CH.di){const ents=Object.entries(d.dinucleotide||{});
-      CH.di=new Chart(diCtx,{type:'bar',data:{labels:ents.map(([k])=>k),datasets:[{data:ents.map(([,v])=>v),backgroundColor:ents.map(([k])=>k==='CG'?'rgba(192,132,252,0.65)':'rgba(52,211,153,0.28)'),borderColor:ents.map(([k])=>k==='CG'?'#c084fc':'#34d399'),borderWidth:1}]},options:{scales:{x:mkAxis({ticks:{font:{size:7}}}),y:mkAxis()},plugins:{legend:mkLegend()}}});}
-    // Melting curve
+    if(diCtx) whenCanvasVisible(diCtx, ()=>{ try{
+      const ents=Object.entries(d.dinucleotide||{}); killChart(diCtx);
+      CH.di=new Chart(diCtx,{type:'bar',data:{labels:ents.map(([k])=>k),datasets:[{data:ents.map(([,v])=>v),backgroundColor:ents.map(([k])=>k==='CG'?'rgba(219,166,255,0.65)':'rgba(76,240,180,0.28)'),borderColor:ents.map(([k])=>k==='CG'?'#dba6ff':'#4cf0b4'),borderWidth:1}]},options:{maintainAspectRatio:false,responsive:true,interaction:{mode:'index',intersect:false},scales:{x:mkAxis({ticks:{font:{size:7}}}),y:mkAxis()},plugins:{legend:mkLegend(),tooltip:mkTooltip()}}});
+      CH.di.resize();
+    }catch(e){ console.error('[chart] chartDi failed:', e); } });
+
     const mCtx=document.getElementById('chartMelt');
-    if(mCtx&&!CH.melt){const tm=d.melting.nearest_neighbor;
+    if(mCtx) whenCanvasVisible(mCtx, ()=>{ try{
+      const tm=d.melting.nearest_neighbor;
       const temps=[],vals=[];
       for(let tt=tm-25;tt<=tm+25;tt+=2){temps.push(tt+'°C');vals.push(Math.round(100/(1+Math.exp(-(tt-tm)/4))));}
-      CH.melt=new Chart(mCtx,{type:'line',data:{labels:temps,datasets:[{label:'% Denatured',data:vals,borderColor:'#f87171',backgroundColor:'rgba(248,113,113,0.06)',borderWidth:2,pointRadius:0,fill:true,tension:0.4}]},options:{scales:{x:mkAxis(),y:{...mkAxis(),min:0,max:100,ticks:{...mkAxis().ticks,callback:v=>v+'%'}}},plugins:{legend:mkLegend()}}});}
-    // Entropy gauge
+      killChart(mCtx);
+      CH.melt=new Chart(mCtx,{type:'line',data:{labels:temps,datasets:[{label:'% Denatured',data:vals,borderColor:'#ff9494',backgroundColor:'rgba(255,148,148,0.06)',borderWidth:2,pointRadius:0,pointHoverRadius:5,pointHitRadius:20,fill:true,tension:0.4}]},options:{maintainAspectRatio:false,responsive:true,interaction:{mode:'index',intersect:false},scales:{x:mkAxis(),y:{...mkAxis(),min:0,max:100,ticks:{...mkAxis().ticks,callback:v=>v+'%'}}},plugins:{legend:mkLegend(),tooltip:mkTooltip()}}});
+      CH.melt.resize();
+    }catch(e){ console.error('[chart] chartMelt failed:', e); } });
+
     const eCtx=document.getElementById('chartEntropy');
-    if(eCtx&&!CH.entropy){
-      CH.entropy=new Chart(eCtx,{type:'doughnut',data:{labels:['Complexity','Remaining'],datasets:[{data:[d.entropy.complexity_pct,100-d.entropy.complexity_pct],backgroundColor:['rgba(244,114,182,0.7)','rgba(23,38,48,0.8)'],borderColor:['#f472b6','#172630'],borderWidth:1.5}]},options:{plugins:{legend:mkLegend(true)},cutout:'68%'}});}
+    if(eCtx) whenCanvasVisible(eCtx, ()=>{ try{
+      killChart(eCtx);
+      CH.entropy=new Chart(eCtx,{type:'doughnut',data:{labels:['Complexity','Remaining'],datasets:[{data:[d.entropy.complexity_pct,100-d.entropy.complexity_pct],backgroundColor:['rgba(244,114,182,0.7)','rgba(30,46,60,0.85)'],borderColor:['#f472b6','#33506a'],borderWidth:1.5}]},options:{maintainAspectRatio:false,responsive:true,plugins:{legend:mkLegend(true),tooltip:mkTooltip()},cutout:'68%'}});
+      CH.entropy.resize();
+    }catch(e){ console.error('[chart] chartEntropy failed:', e); } });
   }
-  // Protein charts
+
   const aaCtx=document.getElementById('chartAA');
-  if(aaCtx&&!CH.aa&&d.aa_composition){const ents=Object.entries(d.aa_composition).sort((a,b)=>b[1].count-a[1].count);
-    CH.aa=new Chart(aaCtx,{type:'bar',data:{labels:ents.map(([aa])=>aa),datasets:[{data:ents.map(([,v])=>v.pct),backgroundColor:'rgba(240,180,41,0.32)',borderColor:'#f0b429',borderWidth:1}]},options:{scales:{x:mkAxis(),y:{...mkAxis(),title:{display:true,text:'%',color:'#3a5f70'}}},plugins:{legend:mkLegend()}}});}
+  if(aaCtx&&d.aa_composition) whenCanvasVisible(aaCtx, ()=>{ try{
+    const ents=Object.entries(d.aa_composition).sort((a,b)=>b[1].count-a[1].count); killChart(aaCtx);
+    CH.aa=new Chart(aaCtx,{type:'bar',data:{labels:ents.map(([aa])=>aa),datasets:[{data:ents.map(([,v])=>v.pct),backgroundColor:'rgba(255,201,77,0.32)',borderColor:'#ffc94d',borderWidth:1}]},options:{maintainAspectRatio:false,responsive:true,interaction:{mode:'index',intersect:false},scales:{x:mkAxis(),y:{...mkAxis(),title:{display:true,text:'%',color:'#7ba3c0'}}},plugins:{legend:mkLegend(),tooltip:mkTooltip()}}});
+    CH.aa.resize();
+  }catch(e){ console.error('[chart] chartAA failed:', e); } });
+
   const secCtx=document.getElementById('chartSecStr');
-  if(secCtx&&!CH.sec&&d.secondary){
-    CH.sec=new Chart(secCtx,{type:'radar',data:{labels:['α-Helix','β-Sheet'],datasets:[{data:[d.secondary.helix_score||0,d.secondary.sheet_score||0],backgroundColor:'rgba(34,211,238,0.13)',borderColor:'#22d3ee',pointBackgroundColor:'#22d3ee',borderWidth:2}]},options:{scales:{r:{ticks:{color:'#3a5f70',backdropColor:'transparent'},grid:{color:'rgba(23,38,48,0.85)'},angleLines:{color:'rgba(23,38,48,0.85)'}}},plugins:{legend:mkLegend()}}});}
-  // Hydrophobicity — key fix: use p.hydro not p.score
+  if(secCtx&&d.secondary) whenCanvasVisible(secCtx, ()=>{ try{
+    killChart(secCtx);
+    CH.sec=new Chart(secCtx,{type:'radar',data:{labels:['α-Helix','β-Sheet'],datasets:[{data:[d.secondary.helix_score||0,d.secondary.sheet_score||0],backgroundColor:'rgba(82,236,255,0.13)',borderColor:'#52ecff',pointBackgroundColor:'#52ecff',pointRadius:4,pointHoverRadius:6,pointHitRadius:20,borderWidth:2}]},options:{maintainAspectRatio:false,responsive:true,interaction:{mode:'nearest',intersect:false},scales:{r:{ticks:{color:'#7ba3c0',backdropColor:'transparent'},grid:{color:'rgba(120,160,190,0.16)'},angleLines:{color:'rgba(120,160,190,0.16)'}}},plugins:{legend:mkLegend(),tooltip:mkTooltip()}}});
+    CH.sec.resize();
+  }catch(e){ console.error('[chart] chartSecStr failed:', e); } });
+
   const hCtx=document.getElementById('chartHydro');
-  if(hCtx&&!CH.hydro&&d.hydro_profile&&d.hydro_profile.length){
+  if(hCtx&&d.hydro_profile&&d.hydro_profile.length) whenCanvasVisible(hCtx, ()=>{ try{
+    killChart(hCtx);
     CH.hydro=new Chart(hCtx,{type:'line',data:{labels:d.hydro_profile.map(p=>p.pos),datasets:[
-      {label:'Hydrophobicity',data:d.hydro_profile.map(p=>p.hydro),borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.07)',borderWidth:1.5,pointRadius:0,fill:true,tension:0.3},
-      {label:'TM threshold (1.6)',data:d.hydro_profile.map(()=>1.6),borderColor:'rgba(248,113,113,0.55)',borderDash:[5,4],borderWidth:1,pointRadius:0,fill:false}
-    ]},options:{scales:{x:mkAxis({ticks:{maxTicksLimit:10}}),y:{...mkAxis(),title:{display:true,text:'Hydrophobicity',color:'#3a5f70'}}},plugins:{legend:mkLegend(true)}}});}
-  // Charge vs pH — key fix: use charge_vs_ph (has {ph, charge}), not charge_profile (which has {pos, charge})
+      {label:'Hydrophobicity',data:d.hydro_profile.map(p=>p.hydro),borderColor:'#4cf0b4',backgroundColor:'rgba(76,240,180,0.07)',borderWidth:1.5,pointRadius:0,pointHoverRadius:5,pointHitRadius:20,fill:true,tension:0.3},
+      {label:'TM threshold (1.6)',data:d.hydro_profile.map(()=>1.6),borderColor:'rgba(255,148,148,0.55)',borderDash:[5,4],borderWidth:1,pointRadius:0,pointHitRadius:20,fill:false}
+    ]},options:{maintainAspectRatio:false,responsive:true,interaction:{mode:'index',intersect:false},scales:{x:mkAxis({ticks:{maxTicksLimit:10}}),y:{...mkAxis(),title:{display:true,text:'Hydrophobicity',color:'#7ba3c0'}}},plugins:{legend:mkLegend(true),tooltip:mkTooltip()}}});
+    CH.hydro.resize();
+  }catch(e){ console.error('[chart] chartHydro failed:', e); } });
+
   const chCtx=document.getElementById('chartCharge');
-  if(chCtx&&!CH.charge){
+  if(chCtx) whenCanvasVisible(chCtx, ()=>{ try{
     const cpData=d.charge_vs_ph||d.charge_profile||[];
-    // charge_vs_ph has {ph, charge}; charge_profile has {pos, charge} — handle both
     const labels=cpData.map(p=>p.ph!==undefined?p.ph.toFixed(1):p.pos);
     const values=cpData.map(p=>p.charge);
     if(cpData.length){
+      killChart(chCtx);
       CH.charge=new Chart(chCtx,{type:'line',data:{labels,datasets:[
-        {label:'Net Charge',data:values,borderColor:'#c084fc',backgroundColor:'rgba(192,132,252,0.06)',borderWidth:2,pointRadius:0,fill:true,tension:0.4},
-        {label:'Zero',data:cpData.map(()=>0),borderColor:'rgba(255,255,255,0.14)',borderDash:[4,4],borderWidth:1,pointRadius:0,fill:false}
-      ]},options:{scales:{x:{...mkAxis(),title:{display:true,text:d.charge_vs_ph?'pH':'Residue position',color:'#3a5f70'}},y:{...mkAxis(),title:{display:true,text:'Net Charge',color:'#3a5f70'}}},plugins:{legend:mkLegend(true)}}});}}
+        {label:'Net Charge',data:values,borderColor:'#dba6ff',backgroundColor:'rgba(219,166,255,0.06)',borderWidth:2,pointRadius:0,pointHoverRadius:5,pointHitRadius:20,fill:true,tension:0.4},
+        {label:'Zero',data:cpData.map(()=>0),borderColor:'rgba(255,255,255,0.14)',borderDash:[4,4],borderWidth:1,pointRadius:0,pointHitRadius:20,fill:false}
+      ]},options:{maintainAspectRatio:false,responsive:true,interaction:{mode:'index',intersect:false},scales:{x:{...mkAxis(),title:{display:true,text:d.charge_vs_ph?'pH':'Residue position',color:'#7ba3c0'}},y:{...mkAxis(),title:{display:true,text:'Net Charge',color:'#7ba3c0'}}},plugins:{legend:mkLegend(true),tooltip:mkTooltip()}}});
+      CH.charge.resize();
+    }
+  }catch(e){ console.error('[chart] chartCharge failed:', e); } });
 }
 
 // ── EXPORT ────────────────────────────────────
 async function exportPDF(){
   if(!window._last)return;
-  const res=await fetch('/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(window._last)});
+  const btn=document.getElementById('exportPdfBtn');
+  const prevLabel=btn?btn.textContent:null;
+  if(btn){btn.disabled=true;btn.textContent='Preparing charts…';}
+  const charts=await captureAllChartImages(window._last);
+  const res=await fetch('/report',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({...window._last, charts})});
   const html=await res.text();
   const w=window.open('','_blank'); w.document.write(html); w.document.close();
   setTimeout(()=>w.print(),800);
+  if(btn){btn.disabled=false;btn.textContent=prevLabel;}
+}
+// Captures every chart on the page as a PNG data-URL for embedding in the
+// PDF report, even charts on tabs the user never actually clicked into.
+// Charts only exist once their tab has been visible (see whenCanvasVisible
+// elsewhere) so every tab-content is briefly made active at once — hidden
+// via visibility (not display), so nothing actually flashes on screen — to
+// force every canvas to real size, then renderCharts() builds anything
+// still missing before we read each one back out with toBase64Image().
+async function captureAllChartImages(d){
+  const images={};
+  const wrap=document.querySelector('.tabs-wrap');
+  if(!wrap) return images;
+  const tabContents=[...wrap.querySelectorAll('.tab-content')];
+  if(!tabContents.length) return images;
+  const prevActive=tabContents.map(tc=>tc.classList.contains('active'));
+  const prevVisibility=wrap.style.visibility;
+  wrap.style.visibility='hidden';
+  tabContents.forEach(tc=>tc.classList.add('active'));
+  try{
+    renderCharts(d);
+    await new Promise(r=>setTimeout(r,350)); // let ResizeObserver-driven builds settle
+    Object.entries(CH).forEach(([id,chart])=>{
+      try{ images[id]=chart.toBase64Image('image/png',1); }catch(e){}
+    });
+  } finally {
+    tabContents.forEach((tc,i)=>tc.classList.toggle('active',prevActive[i]));
+    renderCharts(d); // rebuild correctly for whichever tab is actually visible again
+    wrap.style.visibility=prevVisibility;
+  }
+  return images;
 }
 function exportCSV(){
   const d=window._last; if(!d)return;
@@ -1456,7 +1942,7 @@ function renderBatch(d,container){
     <div class="stat-tile"><div class="tile-lbl">Total ORFs</div><div class="tile-val vp">${r.reduce((s,x)=>s+(x.orfs||0),0)}</div></div>`:''}
     ${protCount?`<div class="stat-tile"><div class="tile-lbl">Protein Seqs</div><div class="tile-val vg">${protCount}</div></div>`:''}
   </div>
-  <div class="tabs-wrap"><div style="padding:18px">
+  <div class="tabs-wrap glass-sheen"><div style="padding:18px">
     <div class="sec-head">Comparison Table${mixed?' <span style="font-weight:400;color:var(--text3);font-size:0.7rem">(mixed DNA/RNA + protein — showing all applicable stats)</span>':''}</div>
     <div style="overflow-x:auto">`;
   // Always show a unified table with a Type column; render each stat only for
@@ -1517,7 +2003,7 @@ function renderAlign(d,container){
       <div class="stat-tile"><div class="tile-lbl">Gaps</div><div class="tile-val vr">${d.gaps}</div></div>
       <div class="stat-tile"><div class="tile-lbl">Align Length</div><div class="tile-val vc">${d.alignment_len}</div></div>
     </div>
-    <div class="tabs-wrap"><div style="padding:18px">
+    <div class="tabs-wrap glass-sheen"><div style="padding:18px">
       <div class="sec-head">${d.method} · ${d.seq_type}</div>
       <div style="font-size:0.68rem;color:var(--text3);margin-bottom:10px;line-height:1.65">
         Seq1: ${d.seq1_len} residues &nbsp;·&nbsp; Seq2: ${d.seq2_len} residues<br>
@@ -1653,7 +2139,7 @@ async function runBlast() {
 }
 
 function blastWaiting(title, sub, wait) {
-  return '<div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:52px;text-align:center">' +
+  return '<div style="background:var(--panel-grad);border:1px solid var(--border);border-radius:12px;padding:52px;text-align:center">' +
     '<div style="font-size:1.8rem;margin-bottom:16px">🔍</div>' +
     '<div style="font-size:0.9rem;font-weight:600;color:var(--text);margin-bottom:6px">' + title + '</div>' +
     '<div class="load-bar" style="margin:16px auto"></div>' +
@@ -1688,6 +2174,7 @@ async function pollBlast(el, btn, attempt) {
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
     if (d.status === 'WAITING' || d.status === 'UNKNOWN') {
+      if (d.debug && attempt % 5 === 0) console.log('[BLAST poll debug] RID='+_blastRID+' attempt='+attempt+':', d.debug);
       _blastTimer = setTimeout(() => pollBlast(el, btn, attempt+1), 8000);
       return;
     }
@@ -1709,7 +2196,7 @@ async function pollBlast(el, btn, attempt) {
 function renderBlast(d, container) {
   const hits = d.hits || [];
   if (!hits.length) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div>' +
+    container.innerHTML = '<div class="empty-state glass-sheen"><div class="empty-icon">🔍</div>' +
       '<div class="empty-title">No significant hits found</div>' +
       '<div class="empty-sub">No database sequences match yours closely enough.<br>' +
       'Try: a different database, longer sequence, or DNA→nt / Protein→nr.</div></div>';
@@ -1758,7 +2245,7 @@ function renderBlast(d, container) {
           'border-radius:3px;transition:width .7s ease"></div>' +
       '</div>' +
       (h.qseq ? '<details style="margin-top:8px"><summary style="font-size:0.6rem;color:var(--text3);cursor:pointer;font-family:\'IBM Plex Mono\';user-select:none">▶ Show alignment</summary>' +
-        '<div style="margin-top:6px;background:#020810;border:1px solid var(--border);border-radius:6px;' +
+        '<div style="margin-top:6px;background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none;border:1px solid var(--border);border-radius:6px;' +
           'padding:9px;font-family:\'IBM Plex Mono\',monospace;font-size:0.62rem;overflow-x:auto;white-space:pre;line-height:2">' +
           '<span style="color:var(--green)">Query  ' + escHtml(h.qseq) + '</span>\n' +
           '<span style="color:var(--text3)">       ' + escHtml(h.midline||'') + '</span>\n' +
@@ -1766,8 +2253,8 @@ function renderBlast(d, container) {
       '</div>';
   });
 
-  html += '<div style="margin-top:10px;padding:11px 14px;background:rgba(240,180,41,0.04);' +
-    'border:1px solid rgba(240,180,41,0.12);border-radius:8px;font-size:0.66rem;color:var(--text2);line-height:1.8">' +
+  html += '<div style="margin-top:10px;padding:11px 14px;background:rgba(255,201,77,0.04);' +
+    'border:1px solid rgba(255,201,77,0.12);border-radius:8px;font-size:0.66rem;color:var(--text2);line-height:1.8">' +
     '💡 <b style="color:var(--amber)">Reading results:</b> ' +
     'E-value = probability of a random match (0 = perfect). Identity% = exact base matches. ' +
     'Coverage% = how much of your query aligned. ' +
@@ -1968,7 +2455,7 @@ function loadRCSB(pdbId) {
     if (overlay) overlay.style.display = 'none';
   });
   document.querySelectorAll('.struct-rcsb-btn').forEach(function(b) {
-    b.style.background = b.textContent.trim().startsWith(pdbId) ? 'rgba(192,132,252,0.22)' : '';
+    b.style.background = b.textContent.trim().startsWith(pdbId) ? 'rgba(219,166,255,0.22)' : '';
     b.style.borderColor= b.textContent.trim().startsWith(pdbId) ? 'var(--purple)' : '';
   });
   setTimeout(function(){ loadRamachandran('https://files.rcsb.org/download/' + pdbId + '.pdb'); }, 2500);
@@ -1996,11 +2483,73 @@ function applyCurrentStyle() {
   try { _viewer.removeAllSurfaces(); } catch(e) {}
   _viewer.setStyle({}, {});
   var colorscheme = getColorScheme(_curColor);
+  var overlay = document.getElementById('structLoadOverlay');
+  var msgEl   = document.getElementById('structLoadMsg');
+  var titleEl = overlay ? overlay.querySelector('div') : null;
   if (_curStyle === 'cartoon')  _viewer.setStyle({}, {cartoon: colorscheme});
-  else if (_curStyle === 'surface') { _viewer.setStyle({},{}); _viewer.addSurface($3Dmol.SurfaceType.VDW, Object.assign({opacity:0.85}, colorscheme)); }
+  else if (_curStyle === 'surface') {
+    _viewer.setStyle({}, {});
+    if (!window.$3Dmol || !$3Dmol.SurfaceType || !$3Dmol.SurfaceType.VDW) {
+      console.error('[structure viewer] $3Dmol.SurfaceType.VDW is unavailable — 3Dmol.js may not have loaded correctly.');
+      _viewer.setStyle({}, {sphere: Object.assign({scale:0.9}, colorscheme)});
+      _viewer.render();
+      return;
+    }
+    if (overlay) { overlay.style.display='flex'; if(titleEl) titleEl.textContent='Computing molecular surface…'; if(msgEl){msgEl.style.color='var(--text3)'; msgEl.textContent='This can take a few seconds for larger proteins';} }
+    var surfaceDone = false;
+    var finish = function(){
+      surfaceDone = true;
+      clearTimeout(hardTimeout);
+      try{ _viewer.render(); }catch(e){}
+      if (overlay) overlay.style.display = 'none';
+    };
+    // True isosurface computation depends on a Web Worker that some
+    // browsers block (CORS on the CDN-hosted worker script), which makes
+    // it hang forever with no error. Rather than leave the viewer stuck
+    // after guessing wrong twice already, fall back automatically to a
+    // large-sphere approximation so something always renders — no dead end.
+    var hardTimeout = setTimeout(function(){
+      if (!surfaceDone && _curStyle === 'surface') {
+        console.warn('[structure viewer] surface generation timed out after 5s — falling back to a sphere approximation (likely a blocked Web Worker/CORS in this browser).');
+        try { _viewer.removeAllSurfaces(); } catch(e) {}
+        _viewer.setStyle({}, {sphere: Object.assign({scale:0.9}, colorscheme)});
+        try{ _viewer.render(); }catch(e){}
+        if (overlay) { if(titleEl) titleEl.textContent='Showing approximate surface'; if(msgEl){msgEl.style.color='var(--amber)'; msgEl.textContent='True surface computation timed out in this browser — showing a space-fill approximation instead.'; setTimeout(function(){ if(overlay) overlay.style.display='none'; }, 2600);} }
+        surfaceDone = true;
+      }
+    }, 5000);
+    try {
+      // addSurface computes the mesh asynchronously — the surface doesn't
+      // exist yet the instant this call returns, so we can't just render()
+      // right after it. Newer 3Dmol builds return a Promise; older/worker
+      // builds don't expose one, so we also poll with renders as a fallback.
+      try { $3Dmol.SurfaceWorker = false; } catch(e) {}
+      var surfP = _viewer.addSurface($3Dmol.SurfaceType.VDW, Object.assign({opacity:0.92}, colorscheme));
+      if (surfP && typeof surfP.then === 'function') {
+        surfP.then(finish).catch(function(err){
+          console.error('[structure viewer] addSurface failed:', err);
+          if (!surfaceDone) { clearTimeout(hardTimeout); surfaceDone=true;
+            _viewer.setStyle({}, {sphere: Object.assign({scale:0.9}, colorscheme)});
+            try{ _viewer.render(); }catch(e){}
+            if (overlay) overlay.style.display='none';
+          }
+        });
+      } else {
+        [200, 500, 1000, 2000, 3500, 4500].forEach(function(ms){
+          setTimeout(function(){ if(!surfaceDone && _curStyle==='surface' && _viewer){ try{ _viewer.render(); }catch(e){} } }, ms);
+        });
+      }
+    } catch(e) {
+      console.error('[structure viewer] addSurface threw synchronously:', e);
+      clearTimeout(hardTimeout); surfaceDone=true;
+      _viewer.setStyle({}, {sphere: Object.assign({scale:0.9}, colorscheme)});
+      if (overlay) overlay.style.display='none';
+    }
+  }
   else if (_curStyle === 'sphere') _viewer.setStyle({}, {sphere: Object.assign({scale:0.35}, colorscheme)});
   else if (_curStyle === 'stick')  _viewer.setStyle({}, {stick: Object.assign({radius:0.12}, colorscheme)});
   else if (_curStyle === 'line')   _viewer.setStyle({}, {line: colorscheme});
+  if (_curStyle !== 'surface' && overlay) overlay.style.display = 'none';
   _viewer.render();
 }
 
@@ -2081,12 +2630,12 @@ function renderRamachandran(points, panel) {
   // regions (based on statistical analysis of high-resolution crystal structures,
   // as used by structure-validation tools like MolProbity/RAMPAGE).
   var REGIONS = [
-    {name:'alpha', tier:'favored', cx:-63,  cy:-43,  rx:32, ry:24, color:'34,211,238'},
-    {name:'alpha', tier:'allowed', cx:-63,  cy:-43,  rx:50, ry:42, color:'34,211,238'},
-    {name:'beta',  tier:'favored', cx:-115, cy:128,  rx:38, ry:42, color:'52,211,153'},
-    {name:'beta',  tier:'allowed', cx:-115, cy:133,  rx:62, ry:58, color:'52,211,153'},
-    {name:'left',  tier:'favored', cx:55,   cy:40,   rx:20, ry:20, color:'240,180,41'},
-    {name:'left',  tier:'allowed', cx:55,   cy:40,   rx:30, ry:30, color:'240,180,41'},
+    {name:'alpha', tier:'favored', cx:-63,  cy:-43,  rx:32, ry:24, color:'82,236,255'},
+    {name:'alpha', tier:'allowed', cx:-63,  cy:-43,  rx:50, ry:42, color:'82,236,255'},
+    {name:'beta',  tier:'favored', cx:-115, cy:128,  rx:38, ry:42, color:'76,240,180'},
+    {name:'beta',  tier:'allowed', cx:-115, cy:133,  rx:62, ry:58, color:'76,240,180'},
+    {name:'left',  tier:'favored', cx:55,   cy:40,   rx:20, ry:20, color:'255,201,77'},
+    {name:'left',  tier:'allowed', cx:55,   cy:40,   rx:30, ry:30, color:'255,201,77'},
   ];
   function inEllipse(phi,psi,cx,cy,rx,ry){ return Math.pow((phi-cx)/rx,2)+Math.pow((psi-cy)/ry,2)<=1; }
   function classify(phi,psi,aa){
@@ -2100,8 +2649,8 @@ function renderRamachandran(points, panel) {
   points.forEach(function(p){ counts[classify(p.phi,p.psi,p.aa)]++; });
   var total = points.length;
 
-  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:420px;display:block;margin:0 auto">';
-  svg += '<rect width="'+W+'" height="'+H+'" fill="#020810"/>';
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:420px;display:block;margin:0 auto;border-radius:10px">';
+  svg += '<rect width="'+W+'" height="'+H+'" rx="10" fill="#0c1620"/>';
 
   // Draw allowed (outer, lighter) regions first, then favored (inner, denser) on top
   ['allowed','favored'].forEach(function(tier){
@@ -2118,34 +2667,34 @@ function renderRamachandran(points, panel) {
   for (var v=-180; v<=180; v+=30) {
     var x=toX(v), y=toY(v);
     var major = (v%90===0);
-    var col = major ? '#26394a' : '#151f2a';
+    var col = major ? '#3a5a78' : '#203344';
     svg += '<line x1="'+x.toFixed(1)+'" y1="'+M+'" x2="'+x.toFixed(1)+'" y2="'+(M+plotH)+'" stroke="'+col+'" stroke-width="'+(major?1:0.6)+'"/>';
     svg += '<line x1="'+M+'" y1="'+y.toFixed(1)+'" x2="'+(M+plotW)+'" y2="'+y.toFixed(1)+'" stroke="'+col+'" stroke-width="'+(major?1:0.6)+'"/>';
   }
 
   // Region labels
-  svg += '<text x="'+toX(-63).toFixed(1)+'" y="'+toY(-43).toFixed(1)+'" fill="rgba(34,211,238,0.55)" font-size="9" font-family="monospace" text-anchor="middle" dy="-30">α-helix</text>';
-  svg += '<text x="'+toX(-115).toFixed(1)+'" y="'+toY(133).toFixed(1)+'" fill="rgba(52,211,153,0.55)" font-size="9" font-family="monospace" text-anchor="middle">β-sheet</text>';
-  svg += '<text x="'+toX(55).toFixed(1)+'" y="'+toY(40).toFixed(1)+'" fill="rgba(240,180,41,0.55)" font-size="7.5" font-family="monospace" text-anchor="middle" dy="-24">L-helix</text>';
+  svg += '<text x="'+toX(-63).toFixed(1)+'" y="'+toY(-43).toFixed(1)+'" fill="rgba(82,236,255,0.55)" font-size="9" font-family="monospace" text-anchor="middle" dy="-30">α-helix</text>';
+  svg += '<text x="'+toX(-115).toFixed(1)+'" y="'+toY(133).toFixed(1)+'" fill="rgba(76,240,180,0.55)" font-size="9" font-family="monospace" text-anchor="middle">β-sheet</text>';
+  svg += '<text x="'+toX(55).toFixed(1)+'" y="'+toY(40).toFixed(1)+'" fill="rgba(255,201,77,0.55)" font-size="7.5" font-family="monospace" text-anchor="middle" dy="-24">L-helix</text>';
 
   // Data points, colored by classification tier (with Gly/Pro called out distinctly)
-  var TIER_COLOR = {favored:'#22d3ee', allowed:'#f0b429', outlier:'#f87171'};
+  var TIER_COLOR = {favored:'#52ecff', allowed:'#ffc94d', outlier:'#ff9494'};
   points.forEach(function(p) {
     var x = toX(p.phi), y = toY(p.psi);
     var tier = classify(p.phi, p.psi, p.aa);
-    var col = (p.aa==='G') ? '#facc15' : (p.aa==='P') ? '#c084fc' : TIER_COLOR[tier];
+    var col = (p.aa==='G') ? '#facc15' : (p.aa==='P') ? '#dba6ff' : TIER_COLOR[tier];
     var r = tier==='outlier' ? 3.2 : 2.6;
     svg += '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="'+r+'" fill="'+col+'" '
          + 'stroke="#020810" stroke-width="0.6" opacity="0.92">'
          + '<title>Residue '+p.res+' ('+(p.aa3||p.aa)+')\nφ='+p.phi+'°  ψ='+p.psi+'°\n'+tier+'</title></circle>';
   });
 
-  svg += '<rect x="'+M+'" y="'+M+'" width="'+plotW+'" height="'+plotH+'" fill="none" stroke="#2a3a4a" stroke-width="1"/>';
-  svg += '<text x="'+(W/2)+'" y="'+(H-6)+'" fill="#5a7a9a" font-size="10" font-family="monospace" text-anchor="middle">φ (phi)</text>';
-  svg += '<text x="12" y="'+(H/2)+'" fill="#5a7a9a" font-size="10" font-family="monospace" text-anchor="middle" transform="rotate(-90,12,'+(H/2)+')">ψ (psi)</text>';
+  svg += '<rect x="'+M+'" y="'+M+'" width="'+plotW+'" height="'+plotH+'" fill="none" stroke="#4a6885" stroke-width="1"/>';
+  svg += '<text x="'+(W/2)+'" y="'+(H-6)+'" fill="#8ab0cc" font-size="10" font-family="monospace" text-anchor="middle">\u03c6 (phi)</text>';
+  svg += '<text x="12" y="'+(H/2)+'" fill="#8ab0cc" font-size="10" font-family="monospace" text-anchor="middle" transform="rotate(-90,12,'+(H/2)+')">\u03c8 (psi)</text>';
   [-180,-90,0,90,180].forEach(function(v){
-    svg += '<text x="'+toX(v).toFixed(1)+'" y="'+(M-8)+'" fill="#3a5a7a" font-size="8" font-family="monospace" text-anchor="middle">'+v+'</text>';
-    svg += '<text x="'+(M-6)+'" y="'+(toY(v)+3).toFixed(1)+'" fill="#3a5a7a" font-size="8" font-family="monospace" text-anchor="end">'+v+'</text>';
+    svg += '<text x="'+toX(v).toFixed(1)+'" y="'+(M-8)+'" fill="#6f96b5" font-size="8" font-family="monospace" text-anchor="middle">'+v+'</text>';
+    svg += '<text x="'+(M-6)+'" y="'+(toY(v)+3).toFixed(1)+'" fill="#6f96b5" font-size="8" font-family="monospace" text-anchor="end">'+v+'</text>';
   });
   svg += '</svg>';
 
@@ -2155,24 +2704,24 @@ function renderRamachandran(points, panel) {
 
   panel.innerHTML =
     '<div class="rama-title">📐 Ramachandran Plot — '+total+' residues</div>'+
-    svg+
+    '<div style="background:var(--glass-lite);border:1px solid var(--border);border-radius:12px;padding:14px;max-width:452px;margin:0 auto">'+svg+'</div>'+
     '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;max-width:420px;margin-left:auto;margin-right:auto">'+
-      '<div style="text-align:center;padding:8px;background:rgba(34,211,238,0.06);border:1px solid rgba(34,211,238,0.2);border-radius:7px">'+
+      '<div style="text-align:center;padding:8px;background:rgba(82,236,255,0.06);border:1px solid rgba(82,236,255,0.2);border-radius:7px">'+
         '<div style="font-size:1.1rem;font-weight:700;color:var(--cyan)">'+favPct+'%</div>'+
         '<div style="font-size:0.55rem;color:var(--text3);font-family:\'IBM Plex Mono\'">FAVORED</div></div>'+
-      '<div style="text-align:center;padding:8px;background:rgba(240,180,41,0.06);border:1px solid rgba(240,180,41,0.2);border-radius:7px">'+
+      '<div style="text-align:center;padding:8px;background:rgba(255,201,77,0.06);border:1px solid rgba(255,201,77,0.2);border-radius:7px">'+
         '<div style="font-size:1.1rem;font-weight:700;color:var(--amber)">'+allPct+'%</div>'+
         '<div style="font-size:0.55rem;color:var(--text3);font-family:\'IBM Plex Mono\'">ALLOWED</div></div>'+
-      '<div style="text-align:center;padding:8px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:7px">'+
+      '<div style="text-align:center;padding:8px;background:rgba(255,148,148,0.06);border:1px solid rgba(255,148,148,0.2);border-radius:7px">'+
         '<div style="font-size:1.1rem;font-weight:700;color:var(--red)">'+outPct+'%</div>'+
         '<div style="font-size:0.55rem;color:var(--text3);font-family:\'IBM Plex Mono\'">OUTLIER</div></div>'+
     '</div>'+
     '<div class="rama-legend" style="margin-top:10px;font-size:0.58rem;color:var(--text3);font-family:\'IBM Plex Mono\',monospace;display:flex;flex-wrap:wrap;gap:10px;justify-content:center">'+
-      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#22d3ee"/></svg> Favored region</span>'+
-      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#f0b429"/></svg> Allowed region</span>'+
-      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#f87171"/></svg> Outlier</span>'+
+      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#52ecff"/></svg> Favored region</span>'+
+      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#ffc94d"/></svg> Allowed region</span>'+
+      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#ff9494"/></svg> Outlier</span>'+
       '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#facc15"/></svg> Gly (expanded space)</span>'+
-      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#c084fc"/></svg> Pro</span>'+
+      '<span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#dba6ff"/></svg> Pro</span>'+
     '</div>'+
     '<div style="margin-top:8px;font-size:0.58rem;color:var(--text3);text-align:center">Hover a point for residue detail. '+
     (parseFloat(outPct)>10 ? '<span style="color:var(--red)">High outlier fraction — check structure quality.</span>' : 'Good backbone geometry overall.')+'</div>'+
@@ -2182,8 +2731,8 @@ function renderRamachandran(points, panel) {
       'These two angles alone define how the protein backbone folds at that position — everything else (side chains, bond lengths) is fairly fixed by chemistry.<br><br>'+
       '<b style="color:var(--amber)">Why the regions matter:</b> Not every φ/ψ combination is physically possible — many would force atoms to overlap. '+
       'The shaded regions mark angle combinations that are sterically allowed and match what\'s actually observed in thousands of solved protein structures: '+
-      'the <b style="color:#22d3ee">α-helix</b> cluster (tight right-handed coil), the <b style="color:#34d399">β-sheet</b> cluster (extended, zig-zag strands), '+
-      'and a small, rare <b style="color:#f0b429">left-handed helix</b> region mostly used by Glycine, which — lacking a side chain — can reach angle combinations no other residue can.<br><br>'+
+      'the <b style="color:#52ecff">α-helix</b> cluster (tight right-handed coil), the <b style="color:#4cf0b4">β-sheet</b> cluster (extended, zig-zag strands), '+
+      'and a small, rare <b style="color:#ffc94d">left-handed helix</b> region mostly used by Glycine, which — lacking a side chain — can reach angle combinations no other residue can.<br><br>'+
       '<b style="color:var(--amber)">Reading the quality summary:</b> <b style="color:var(--cyan)">Favored</b> = ideal, low-strain backbone geometry. '+
       '<b style="color:var(--amber)">Allowed</b> = still physically reasonable, just less common. '+
       '<b style="color:var(--red)">Outlier</b> = strained or unusual geometry — sometimes a real flexible loop or active-site distortion, but often a sign of a lower-resolution structure or a modeling/prediction error. '+
@@ -2262,7 +2811,7 @@ function renderPhyloTree(d, container) {
   var maxDepth = nodeDepth[rootKey] || n;
 
   // ── 4. Layout constants ────────────────────────────────────────────────────
-  var LABEL_W = 0, RM = 160, TM = 44, BM = 24;
+  var LABEL_W = 44, RM = 170, TM = 50, BM = 28;
   var ROW_H   = Math.max(28, Math.min(48, 540 / n));
   var SVG_H   = TM + BM + n * ROW_H;
   var SVG_W   = 880;
@@ -2289,7 +2838,7 @@ function renderPhyloTree(d, container) {
   });
 
   // ── 6. Draw branches ───────────────────────────────────────────────────────
-  var LEAF_COLORS = ['#22d3ee','#34d399','#f0b429','#a78bfa','#f87171',
+  var LEAF_COLORS = ['#52ecff','#4cf0b4','#ffc94d','#a78bfa','#ff9494',
                      '#fb923c','#38bdf8','#4ade80','#e879f9','#facc15'];
   // Assign a color to each leaf
   var leafColor = {};
@@ -2298,9 +2847,9 @@ function renderPhyloTree(d, container) {
   var nodeColor = {};
   steps.forEach(function(s, idx) {
     var key = 'Node' + (n + idx);
-    nodeColor[key] = nodeColor[s.a] || leafColor[s.a] || '#22d3ee';
+    nodeColor[key] = nodeColor[s.a] || leafColor[s.a] || '#52ecff';
   });
-  function getColor(label) { return leafColor[label] || nodeColor[label] || '#22d3ee'; }
+  function getColor(label) { return leafColor[label] || nodeColor[label] || '#52ecff'; }
 
   var paths = '';
   var maxH = steps.length ? Math.max(steps[steps.length-1].height, 1e-9) : 1;
@@ -2311,25 +2860,26 @@ function renderPhyloTree(d, container) {
     var pa  = pos[s.a] || {x: LABEL_W, y: pm.y};
     var pb  = pos[s.b] || {x: LABEL_W, y: pm.y};
     var isRoot = idx === steps.length - 1;
-    var col  = isRoot ? '#f0b429' : '#22d3ee';
-    var lw   = isRoot ? '2' : '1.8';
+    var col  = isRoot ? '#ffc94d' : '#52ecff';
+    var lw   = isRoot ? '2.4' : '2';
 
     // Vertical connector
     paths += '<line x1="'+pm.x.toFixed(1)+'" y1="'+pa.y.toFixed(1)+'" x2="'+pm.x.toFixed(1)+'" y2="'+pb.y.toFixed(1)+
-      '" stroke="'+col+'" stroke-width="'+lw+'" opacity="0.85"/>';
+      '" stroke="'+col+'" stroke-width="'+lw+'" stroke-linecap="round" opacity="0.9"/>';
     // Horizontal arm → child A
     paths += '<line x1="'+pm.x.toFixed(1)+'" y1="'+pa.y.toFixed(1)+'" x2="'+pa.x.toFixed(1)+'" y2="'+pa.y.toFixed(1)+
-      '" stroke="'+getColor(s.a)+'" stroke-width="'+lw+'" opacity="0.9"/>';
+      '" stroke="'+getColor(s.a)+'" stroke-width="'+lw+'" stroke-linecap="round" opacity="0.92"/>';
     // Horizontal arm → child B
     paths += '<line x1="'+pm.x.toFixed(1)+'" y1="'+pb.y.toFixed(1)+'" x2="'+pb.x.toFixed(1)+'" y2="'+pb.y.toFixed(1)+
-      '" stroke="'+getColor(s.b)+'" stroke-width="'+lw+'" opacity="0.9"/>';
+      '" stroke="'+getColor(s.b)+'" stroke-width="'+lw+'" stroke-linecap="round" opacity="0.92"/>';
     // Distance label on branch midpoint
     var dist = s.dist > 0 ? s.dist.toFixed(4) : '0';
     var midX = ((pm.x + pa.x) / 2).toFixed(1);
     var midX2 = ((pm.x + pb.x) / 2).toFixed(1);
-    paths += '<text x="'+midX+'" y="'+(pa.y - 3).toFixed(1)+'" fill="#3a6a8a" font-size="7" font-family="monospace" text-anchor="middle">'+dist+'</text>';
-    // Internal node dot
-    paths += '<circle cx="'+pm.x.toFixed(1)+'" cy="'+pm.y.toFixed(1)+'" r="3.5" fill="'+col+'" opacity="0.95" stroke="#020810" stroke-width="0.8"/>';
+    paths += '<text x="'+midX+'" y="'+(pa.y - 4).toFixed(1)+'" fill="#7ba3c0" font-size="7.5" font-family="monospace" text-anchor="middle">'+dist+'</text>';
+    // Internal node dot (with soft glow)
+    paths += '<circle cx="'+pm.x.toFixed(1)+'" cy="'+pm.y.toFixed(1)+'" r="6" fill="'+col+'" opacity="0.18" filter="url(#phyloGlow)"/>';
+    paths += '<circle cx="'+pm.x.toFixed(1)+'" cy="'+pm.y.toFixed(1)+'" r="3.6" fill="'+col+'" opacity="0.98" stroke="#0c1620" stroke-width="1"/>';
   });
 
   // Leaf tick marks
@@ -2337,9 +2887,10 @@ function renderPhyloTree(d, container) {
   order.forEach(function(nm, i) {
     var p   = pos[nm];
     var col = leafColor[nm];
-    labelsSvg += '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="3" fill="'+col+'" stroke="#020810" stroke-width="1"/>';
+    labelsSvg += '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="5.5" fill="'+col+'" opacity="0.16" filter="url(#phyloGlow)"/>';
+    labelsSvg += '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="3.2" fill="'+col+'" stroke="#0c1620" stroke-width="1.2"/>';
     labelsSvg += '<text x="'+(p.x+10)+'" y="'+(p.y+4).toFixed(1)+
-      '" fill="'+col+'" font-size="12" font-weight="500" font-family="\'IBM Plex Mono\',monospace" text-anchor="start">'+
+      '" fill="'+col+'" font-size="12" font-weight="600" font-family="\'IBM Plex Mono\',monospace" text-anchor="start">'+
       '<title>'+escHtml(nm)+'</title>'+escHtml(shortName(nm))+'</text>';
   });
 
@@ -2352,19 +2903,21 @@ function renderPhyloTree(d, container) {
     // Map real distance to approximate x position (for reference only)
     var ax = LABEL_W + PLOT_W * (1 - frac);
     axis += '<line x1="'+ax.toFixed(1)+'" y1="'+(TM-6)+'" x2="'+ax.toFixed(1)+'" y2="'+(TM)+
-      '" stroke="#2a3a4a" stroke-width="1"/>';
+      '" stroke="#3a5a78" stroke-width="1"/>';
     axis += '<line x1="'+ax.toFixed(1)+'" y1="'+TM+'" x2="'+ax.toFixed(1)+'" y2="'+(SVG_H-BM)+
-      '" stroke="rgba(26,42,56,0.5)" stroke-width="0.5" stroke-dasharray="3,4"/>';
-    axis += '<text x="'+ax.toFixed(1)+'" y="'+(TM-10)+'" fill="#4a6a8a" font-size="8" font-family="monospace" text-anchor="middle">'+realDist+'</text>';
+      '" stroke="rgba(90,130,165,0.22)" stroke-width="0.5" stroke-dasharray="3,4"/>';
+    axis += '<text x="'+ax.toFixed(1)+'" y="'+(TM-10)+'" fill="#7ba3c0" font-size="8.5" font-family="monospace" text-anchor="middle">'+realDist+'</text>';
   }
-  axis += '<text x="'+(LABEL_W+PLOT_W*0.5)+'" y="'+(TM-22)+'" fill="#3a5a7a" font-size="9" font-family="monospace" text-anchor="middle">← more similar  ·  p-distance  ·  more divergent →</text>';
-  axis += '<rect x="'+LABEL_W+'" y="'+TM+'" width="'+PLOT_W+'" height="'+(SVG_H-TM-BM)+'" fill="none" stroke="#1a2a38" stroke-width="1"/>';
+  axis += '<text x="'+(LABEL_W+PLOT_W*0.5)+'" y="'+(TM-26)+'" fill="#8fb3c7" font-size="9.5" font-family="monospace" text-anchor="middle">← more similar  ·  p-distance  ·  more divergent →</text>';
+  axis += '<rect x="'+LABEL_W+'" y="'+TM+'" width="'+PLOT_W+'" height="'+(SVG_H-TM-BM)+'" fill="none" stroke="#2e4a60" stroke-width="1" rx="4"/>';
 
   var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+SVG_W+' '+SVG_H+
-    '" style="width:100%;display:block;background:#020810;border-radius:8px">'+
-    '<rect width="'+SVG_W+'" height="'+SVG_H+'" fill="#020810"/>'+
+    '" style="width:100%;display:block;background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none;border-radius:8px">'+
+    '<defs><filter id="phyloGlow" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'+
+    '<linearGradient id="phyloBg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0e1a26"/><stop offset="100%" stop-color="#0a141c"/></linearGradient></defs>'+
+    '<rect width="'+SVG_W+'" height="'+SVG_H+'" fill="url(#phyloBg)"/>'+
     axis + paths + labelsSvg +
-    '<text x="10" y="'+(SVG_H-6)+'" fill="#1e3a5a" font-size="8" font-family="monospace">Layout: cladogram (branch lengths proportional to actual p-distance annotations)</text>'+
+    '<text x="10" y="'+(SVG_H-6)+'" fill="#3a5a78" font-size="8" font-family="monospace">Layout: cladogram (branch lengths proportional to actual p-distance annotations)</text>'+
     '</svg>';
 
   // ── 7. Distance matrix ─────────────────────────────────────────────────────
@@ -2390,9 +2943,9 @@ function renderPhyloTree(d, container) {
     stepsHtml +=
       '<div style="font-size:0.62rem;font-family:\'IBM Plex Mono\',monospace;color:var(--text2);padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);display:flex;justify-content:space-between">'+
       '<span><span style="color:var(--text3)">Step '+(i+1)+'  </span>'+
-      '<span style="color:#22d3ee" title="'+escHtml(s.a)+'">'+escHtml(shortName(s.a))+'</span>'+
+      '<span style="color:#52ecff" title="'+escHtml(s.a)+'">'+escHtml(shortName(s.a))+'</span>'+
       '<span style="color:var(--text3)"> ＋ </span>'+
-      '<span style="color:#34d399" title="'+escHtml(s.b)+'">'+escHtml(shortName(s.b))+'</span></span>'+
+      '<span style="color:#4cf0b4" title="'+escHtml(s.b)+'">'+escHtml(shortName(s.b))+'</span></span>'+
       '<span style="color:var(--text3)">d = '+s.dist.toFixed(4)+'</span></div>';
   });
   stepsHtml += '</div>';
@@ -2403,7 +2956,7 @@ function renderPhyloTree(d, container) {
     '<div style="padding:10px 18px;border-top:1px solid var(--border);display:flex;align-items:flex-start;gap:8px">'+
     '<div style="font-size:0.56rem;font-family:\'IBM Plex Mono\',monospace;color:var(--text3);word-break:break-all;flex:1;line-height:1.7">'+escHtml(newick)+'</div>'+
     '<button onclick="navigator.clipboard.writeText(\''+safeNewick+'\')" '+
-    'style="flex-shrink:0;padding:5px 10px;background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.2);'+
+    'style="flex-shrink:0;padding:5px 10px;background:rgba(82,236,255,0.08);border:1px solid rgba(82,236,255,0.2);'+
     'color:var(--cyan);border-radius:5px;font-size:0.58rem;cursor:pointer;font-family:\'IBM Plex Mono\'">Copy Newick</button>'+
     '</div>';
 
@@ -2429,15 +2982,29 @@ function _upgmaLeafOrder(names, steps) {
   return groups['Node' + (n + steps.length - 1)] || names.slice();
 }
 
-// Lazy-load 3Dmol only when structure viewer is first opened (saves 3MB on initial load)
+// Lazy-load 3Dmol only when structure viewer is first opened (saves 3MB on initial load).
+// Pinned to a specific tagged release via jsDelivr with SRI, instead of pitt.edu's
+// unversioned URL which the 3Dmol maintainers themselves warn "closely tracks the
+// development version and so will change frequently" -- with no way to verify
+// integrity or pin a known-good version.
 var _3dmolLoaded = false;
 function _load3Dmol(callback) {
   if (typeof $3Dmol !== 'undefined') { callback(); return; }
   if (_3dmolLoaded) { var t=setInterval(function(){ if(typeof $3Dmol!=='undefined'){clearInterval(t);callback();} },100); return; }
   _3dmolLoaded = true;
   var s = document.createElement('script');
-  s.src = 'https://3dmol.csb.pitt.edu/build/3Dmol-min.js';
-  s.onload = callback;
+  s.src = 'https://cdn.jsdelivr.net/npm/3dmol@2.5.5/build/3Dmol-min.js';
+  s.integrity = 'sha384-OsczYbldvrHgslr9fFp/i4GiLSeuw9l+QIlv99ITw8soOwXcoGeflFMLg+CU/X1d';
+  s.crossOrigin = 'anonymous';
+  s.onload = function() {
+    // Force surface generation onto the main thread instead of a Web
+    // Worker. 3Dmol's surface worker is spun up from a CDN-hosted script;
+    // browsers frequently block that cross-origin worker creation (CORS),
+    // which is exactly what produces the silent "computes forever, never
+    // renders" surface bug — main-thread computation is slower but reliable.
+    try { if (typeof $3Dmol !== 'undefined') $3Dmol.SurfaceWorker = false; } catch(e) {}
+    callback();
+  };
   document.head.appendChild(s);
 }
 
