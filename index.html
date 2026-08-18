@@ -139,8 +139,13 @@ button:active,.tnav:active,.tab:active,.samp:active,.struct-btn:active,.export-b
   /* CRITICAL FIX: input-panel used position:sticky designed for the desktop
      two-column layout. On mobile the grid collapses to one column, but the
      panel kept floating/pinning at top:98px while the results below it
-     scrolled underneath — causing the reported overlap. Disable sticky here. */
-  .input-panel{position:static;top:auto}
+     scrolled underneath — causing the reported overlap. Disable sticky here.
+     NOTE: the unconditional `.input-panel{position:sticky;top:98px}` rule
+     further down the stylesheet has equal selector specificity and comes
+     LATER in source order, so without !important it silently wins back at
+     every width below 900px — this is what actually caused the sequence
+     input box to sit on top of / overlap the results panel on phones. */
+  .input-panel{position:static!important;top:auto!important}
   /* CRITICAL FIX: topbar+toolnav stack via hardcoded pixel math (toolnav's
      top:56px assumes topbar is exactly 56px tall). That assumption can break
      on mobile browsers due to font rendering differences, safe-area insets
@@ -166,6 +171,66 @@ button:active,.tnav:active,.tab:active,.samp:active,.struct-btn:active,.export-b
   .brand h1{font-size:0.72rem}
   .codon-grid{grid-template-columns:repeat(4,1fr)}
   .tile-grid{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}
+  .empty-state{padding:36px 18px}
+  .chart-box{padding:11px}
+}
+
+/* ── MOBILE HARDENING ──────────────────────────────────────────────────
+   Most of the app's result panels are built at runtime in JS and use
+   inline `style="display:grid;grid-template-columns:…"` (chart+stats
+   rows, 2-up comparison rows, primer pair cards, etc). Those layouts were
+   only ever designed at desktop widths, so on a phone the fixed columns
+   (e.g. "170px 1fr") or equal "1fr 1fr" splits squeeze charts into the
+   wrong aspect ratio and squeeze text until it clips or visually runs
+   into its neighbour. Rather than rewrite every JS template, target the
+   inline styles directly with attribute selectors and collapse them to a
+   single column on narrow screens — this fixes every current tab and any
+   future one built the same way. ── */
+@media(max-width:760px){
+  div[style*="grid-template-columns:170px 1fr"],
+  div[style*="grid-template-columns:160px 1fr"]{
+    grid-template-columns:1fr!important;
+  }
+}
+@media(max-width:620px){
+  div[style*="grid-template-columns:1fr 1fr"],
+  div[style*="grid-template-columns:repeat(3,1fr)"],
+  div[style*="grid-template-columns: 1fr 1fr"],
+  div[style*="grid-template-columns: repeat(3,1fr)"]{
+    grid-template-columns:1fr!important;
+  }
+  /* Chart canvases stack full-width once the grid above collapses —
+     trim the tallest fixed chart-frame heights so a tab with 3-4 stacked
+     charts doesn't turn into an extremely long scroll. */
+  div[style*="height:340px"]{height:250px!important}
+  div[style*="height:300px"]{height:230px!important}
+  div[style*="height:280px"]{height:220px!important}
+  div[style*="height:260px"]{height:210px!important}
+}
+/* Grid/flex children default to min-width:auto, which stops them from
+   shrinking below their content's natural width. That's what actually
+   produces "overlapping" panels on mobile: a column full of long text
+   (a sequence, a table, a badge row) refuses to shrink, so it pushes
+   past its column edge into whatever sits next to or below it instead
+   of wrapping. This one rule fixes that for every grid built in JS. */
+div[style*="display:grid"] > *{min-width:0}
+.layout,.struct-body{min-width:0}
+.layout>*,.struct-body>*{min-width:0}
+/* Tables are the other common overflow source — a "Sequence" or
+   "Translation" column has no spaces to wrap on, so on a narrow screen
+   it either overflows the page or gets clipped and unreadable. Give
+   every data table its own horizontal scroller instead. */
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:2px}
+.table-scroll .data-table{min-width:100%}
+@media(max-width:480px){
+  .data-table th,.data-table td{padding:6px 8px;font-size:0.68rem}
+}
+/* iOS Safari auto-zooms the whole page when a focused input's font-size
+   is under 16px — every text field here is ~12px. That forced zoom is
+   what makes the layout feel like it "breaks" the moment someone taps
+   into the sequence box or an API key field on a phone. */
+@media(max-width:900px){
+  textarea.seq,.field input,.field select,.help-search input{font-size:16px}
 }
 
 /* ── INPUT PANEL ── */
@@ -1463,13 +1528,13 @@ function buildOverviewTab(d,mkTC){
     <div style="font-size:0.54rem;color:var(--text3);font-family:'IBM Plex Mono',monospace;margin-bottom:3px;letter-spacing:0.12em">REVERSE COMPLEMENT (5'→3')</div>
     <div class="seq-display" style="color:var(--amber)">${d.rev_complement}${d.rev_complement.length>=100?'…':''}</div>
     <div class="sec-head" style="margin-top:4px">All 6 Reading Frames (first 80 aa)</div>
-    <table class="data-table"><thead><tr><th>Frame</th><th>Dir</th><th>Translation</th></tr></thead><tbody>
+    <div class="table-scroll"><table class="data-table"><thead><tr><th>Frame</th><th>Dir</th><th>Translation</th></tr></thead><tbody>
     ${(d.six_frames||[]).map(f=>`<tr>
       <td style="color:var(--amber);font-family:'IBM Plex Mono'">${f.frame}</td>
       <td><span class="badge ${f.frame.startsWith('+')?'bg':'bp'}">${f.frame.startsWith('+')?'+':'-'}</span></td>
       <td style="font-family:'IBM Plex Mono',monospace;font-size:0.64rem;color:var(--text2)">${f.translation||f.protein||''}</td>
     </tr>`).join('')}
-    </tbody></table>`;
+    </tbody></table></div>`;
   return t;
 }
 
@@ -1508,7 +1573,7 @@ function buildORFTab(d,mkTC){
     <div class="sec-head">ORF Map — ${d.orfs.length} ORFs (longer bar = more likely real gene)</div>
     <div class="orf-map">${lanes||'<div style="color:var(--text3);padding:8px;font-size:0.74rem">No ORFs found (sequence too short or non-coding)</div>'}</div>
     <div class="sec-head" style="margin-top:4px">ORF Table</div>
-    <table class="data-table"><thead><tr><th>Frame</th><th>Strand</th><th>Start</th><th>End</th><th>Length</th><th>Protein</th><th>Sequence</th></tr></thead><tbody>${rows}</tbody></table>`;
+    <div class="table-scroll"><table class="data-table"><thead><tr><th>Frame</th><th>Strand</th><th>Start</th><th>End</th><th>Length</th><th>Protein</th><th>Sequence</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   return t;
 }
 
@@ -1534,7 +1599,7 @@ function buildRestrictTab(d,mkTC){
     <div class="sec-head">Visual Map — ${d.restriction.length} enzymes cut here</div>
     <div class="remap">${lanes||'<div style="color:var(--text3);padding:8px;font-size:0.74rem">No restriction sites found</div>'}</div>
     <div class="sec-head" style="margin-top:12px">All Sites</div>
-    <table class="data-table"><thead><tr><th>Enzyme</th><th>Pattern</th><th>Cuts</th><th>Positions</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table>`;
+    <div class="table-scroll"><table class="data-table"><thead><tr><th>Enzyme</th><th>Pattern</th><th>Cuts</th><th>Positions</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   return t;
 }
 
@@ -1553,15 +1618,15 @@ function buildFeaturesTab(d,mkTC){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
       <div>
         <div class="sec-head">Microsatellites / SSRs (${(d.microsatellites||[]).length})</div>
-        <table class="data-table"><thead><tr><th>Motif</th><th>Start</th><th>End</th><th>Reps</th><th>Len</th></tr></thead><tbody>${msRows||'<tr><td colspan="5" style="color:var(--text3)">None found</td></tr>'}</tbody></table>
+        <div class="table-scroll"><table class="data-table"><thead><tr><th>Motif</th><th>Start</th><th>End</th><th>Reps</th><th>Len</th></tr></thead><tbody>${msRows||'<tr><td colspan="5" style="color:var(--text3)">None found</td></tr>'}</tbody></table></div>
         <div class="sec-head" style="margin-top:12px">CpG Islands (${(d.cpg_islands||[]).length})</div>
-        <table class="data-table"><thead><tr><th>Start</th><th>End</th><th>Length</th></tr></thead><tbody>${cpgRows||'<tr><td colspan="3" style="color:var(--text3)">None found</td></tr>'}</tbody></table>
+        <div class="table-scroll"><table class="data-table"><thead><tr><th>Start</th><th>End</th><th>Length</th></tr></thead><tbody>${cpgRows||'<tr><td colspan="3" style="color:var(--text3)">None found</td></tr>'}</tbody></table></div>
       </div>
       <div>
         <div class="sec-head">Promoter Elements</div>
-        <table class="data-table"><thead><tr><th>Type</th><th>Pos</th><th>Sequence</th><th>Note</th></tr></thead><tbody>${prRows||'<tr><td colspan="4" style="color:var(--text3)">None found</td></tr>'}</tbody></table>
+        <div class="table-scroll"><table class="data-table"><thead><tr><th>Type</th><th>Pos</th><th>Sequence</th><th>Note</th></tr></thead><tbody>${prRows||'<tr><td colspan="4" style="color:var(--text3)">None found</td></tr>'}</tbody></table></div>
         <div class="sec-head" style="margin-top:12px">Palindromic Sites</div>
-        <table class="data-table"><thead><tr><th>Pos</th><th>Sequence</th><th>Len</th></tr></thead><tbody>${palRows||'<tr><td colspan="3" style="color:var(--text3)">None found</td></tr>'}</tbody></table>
+        <div class="table-scroll"><table class="data-table"><thead><tr><th>Pos</th><th>Sequence</th><th>Len</th></tr></thead><tbody>${palRows||'<tr><td colspan="3" style="color:var(--text3)">None found</td></tr>'}</tbody></table></div>
         ${rna?`<div class="sec-head" style="margin-top:12px">RNA Secondary Structure (Nussinov)</div>
         <div style="background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none;border:1px solid var(--border);border-radius:7px;padding:11px;font-family:'IBM Plex Mono',monospace;font-size:0.65rem">
           <div style="color:var(--green);word-break:break-all;line-height:2">${rna.sequence||''}</div>
@@ -1645,9 +1710,9 @@ function buildThermoTab(d,mkTC){
       </div>
     </div>
     <div class="sec-head">Direct Repeats</div>
-    <table class="data-table"><thead><tr><th>Sequence</th><th>Positions (pos1 / pos2)</th><th>Length</th></tr></thead><tbody>
+    <div class="table-scroll"><table class="data-table"><thead><tr><th>Sequence</th><th>Positions (pos1 / pos2)</th><th>Length</th></tr></thead><tbody>
     ${(d.repeats||[]).slice(0,10).map(r=>`<tr><td style="font-family:'IBM Plex Mono';color:var(--cyan)">${r.sequence}</td><td style="color:var(--amber)">${r.pos1} &amp; ${r.pos2}</td><td>${r.length} bp</td></tr>`).join('')||'<tr><td colspan="3" style="color:var(--text3)">None found</td></tr>'}
-    </tbody></table>`;
+    </tbody></table></div>`;
   return t;
 }
 
@@ -1710,7 +1775,7 @@ function buildProtOvTab(d,mkTC){
     <div class="sec-head">Amino Acid Composition</div>
     <div class="chart-box"><div class="chart-frame" style="height:300px"><canvas id="chartAA"></canvas></div></div>
     ${(d.tm_helices||[]).length?`<div class="sec-head" style="margin-top:4px">Transmembrane Helices (${d.tm_helices.length})</div>
-    <table class="data-table"><thead><tr><th>Helix #</th><th>Start</th><th>End</th><th>Length</th></tr></thead><tbody>${tmRows}</tbody></table>`:''}`;
+    <div class="table-scroll"><table class="data-table"><thead><tr><th>Helix #</th><th>Start</th><th>End</th><th>Length</th></tr></thead><tbody>${tmRows}</tbody></table></div>`:''}`;
   return t;
 }
 
@@ -1735,7 +1800,7 @@ function buildChargeTab(d,mkTC){
     <div style="font-size:0.7rem;color:var(--text3);margin-bottom:9px;line-height:1.65">Shows total protein charge across the entire pH range. Where the curve crosses zero = pI (${d.pi}). At body pH 7.4, this protein has a net charge of <b style="color:var(--cyan)">${d.charge_at_7}</b>.</div>
     <div class="chart-box"><div class="chart-frame" style="height:340px"><canvas id="chartCharge"></canvas></div></div>
     <div class="sec-head" style="margin-top:4px">Ionizable Residues (affect the curve)</div>
-    <table class="data-table"><thead><tr><th>Residue</th><th>Count in protein</th><th>pKa</th><th>Charge at pH 7.4</th></tr></thead><tbody>
+    <div class="table-scroll"><table class="data-table"><thead><tr><th>Residue</th><th>Count in protein</th><th>pKa</th><th>Charge at pH 7.4</th></tr></thead><tbody>
       ${[['Aspartate (D)','D',3.9,'Negative (−1)','vr'],['Glutamate (E)','E',4.1,'Negative (−1)','vr'],
          ['Histidine (H)','H',6.0,'~Neutral',''],['Cysteine (C)','C',8.3,'Slightly negative',''],
          ['Tyrosine (Y)','Y',10.1,'Slightly negative',''],['Lysine (K)','K',10.5,'Positive (+1)','vg'],
@@ -1745,7 +1810,7 @@ function buildChargeTab(d,mkTC){
         <td style="font-family:'IBM Plex Mono'">${pka}</td>
         <td class="${cls}">${charge}</td>
       </tr>`).join('')}
-    </tbody></table>`;
+    </tbody></table></div>`;
   return t;
 }
 
@@ -1756,7 +1821,7 @@ function buildProtCompTab(d,mkTC){
     <td style="color:var(--cyan)">${v.count}</td><td>${v.pct}%</td>
     <td><div style="height:5px;background:var(--border);border-radius:3px"><div style="height:100%;width:${Math.min(100,v.pct*5)}%;background:linear-gradient(90deg,var(--amber),var(--cyan));border-radius:3px"></div></div></td>
   </tr>`).join('');
-  t.innerHTML=`<div class="sec-head">Amino Acid Composition</div><table class="data-table"><thead><tr><th>AA</th><th>Count</th><th>%</th><th>Proportion</th></tr></thead><tbody>${rows}</tbody></table>`;
+  t.innerHTML=`<div class="sec-head">Amino Acid Composition</div><div class="table-scroll"><table class="data-table"><thead><tr><th>AA</th><th>Count</th><th>%</th><th>Proportion</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   return t;
 }
 
@@ -1949,7 +2014,7 @@ function renderBatch(d,container){
   // rows where it actually applies (previously the format was locked based on
   // row[0]'s type alone, showing "undefined" for every mismatched row in a
   // mixed batch).
-  html+=`<table class="data-table"><thead><tr><th>Name</th><th>Type</th><th>Length</th>
+  html+=`<div class="table-scroll"><table class="data-table"><thead><tr><th>Name</th><th>Type</th><th>Length</th>
     <th>GC%</th><th>Tm</th><th>MW</th><th>ORFs</th><th>pI</th><th>GRAVY</th><th>Instability</th></tr></thead><tbody>`;
   r.forEach(x=>{
     const isDnaRow = x.gc!==undefined;
@@ -1967,7 +2032,7 @@ function renderBatch(d,container){
       <td style="color:${isProtRow&&x.instability<40?'var(--green)':isProtRow?'var(--red)':'var(--text)'}">${isProtRow?fmt(x.instability):fmt()}</td>
     </tr>`;
   });
-  html+=`</tbody></table>`;
+  html+=`</tbody></table></div>`;
   html+=`</div><div class="export-bar"><button class="export-btn" onclick='exportBatchCSV(${JSON.stringify(r)})'>⬇ Export CSV</button></div></div></div>`;
   container.innerHTML=html;
 }
