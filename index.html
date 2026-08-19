@@ -27,8 +27,9 @@
      as the app's functional accent system rather than arbitrary UI color */
   --base-a:#4cf0b4;--base-t:#ff9494;--base-g:#ffc94d;--base-c:#52ecff;
 }
-*{box-sizing:border-box;margin:0;padding:0}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html{scroll-behavior:smooth}
+button,.tab,.tnav,.samp{touch-action:manipulation}
 @media(prefers-reduced-motion:reduce){*{animation-duration:0.001ms!important;animation-iteration-count:1!important;transition-duration:0.001ms!important;scroll-behavior:auto!important}}
 body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-weight:400;min-height:100vh;overflow-x:hidden}
 
@@ -163,6 +164,30 @@ button:active,.tnav:active,.tab:active,.samp:active,.struct-btn:active,.export-b
   .codon-grid{grid-template-columns:repeat(5,1fr)}
   .struct-viewer{height:320px}
   .help-panel{width:100vw}
+  /* Comfortable thumb targets — desktop keeps the tighter, denser
+     padding (mouse pointers don't need this), phones get ~40px+ tap
+     areas on every button-like control so nothing needs a second try.
+     NOTE: every rule here needs !important. This media query sits early
+     in the stylesheet (right after .layout's forward declaration) but
+     several of these components' base/unconditional rules are declared
+     much later in the file (.samp, .tab, .help-close, .help-btn) — on
+     equal specificity the later rule wins regardless of the media
+     query, which is exactly the bug that caused the input-panel/topbar
+     overlap earlier. Learned that lesson the hard way; not repeating it. */
+  .tab{padding:13px 14px!important;min-height:40px}
+  .samp{padding:8px 12px!important;min-height:36px}
+  .help-close{width:36px!important;height:36px!important}
+  /* Backdrop blur is one of the most GPU-expensive CSS effects, and this
+     app leans on it heavily (every panel, the topbar, tab content). On a
+     mid-range phone that adds up to visible scroll jank. Desktop keeps
+     the full blur; mobile gets a lighter, still-glassy version that's
+     far cheaper to composite every frame. */
+  :root{--glass-blur:blur(12px) saturate(140%);--glass-blur-lite:blur(8px) saturate(130%)}
+  /* Respect the iPhone notch / Dynamic Island and the home-indicator
+     safe areas instead of drawing under them. */
+  .topbar{padding-left:max(14px,env(safe-area-inset-left))!important;padding-right:max(14px,env(safe-area-inset-right))!important}
+  .layout{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}
+  .help-btn{right:max(24px,calc(env(safe-area-inset-right) + 16px))!important;bottom:max(24px,calc(env(safe-area-inset-bottom) + 16px))!important}
 }
 @media(max-width:480px){
   .layout{padding:10px}
@@ -553,7 +578,14 @@ textarea.seq:focus{border-color:rgba(76,240,180,0.5);box-shadow:0 0 0 4px rgba(7
 /* ── PHYLO TREE ── */
 .phylo-wrap{background:var(--panel-grad);border:1px solid var(--border);border-radius:12px;overflow:hidden;backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur)}
 .phylo-header{padding:14px 18px;background:var(--panel2);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
-.phylo-canvas-wrap{padding:18px;overflow:auto;min-height:400px;background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none}
+.phylo-canvas-wrap{padding:18px;overflow:auto;background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none}
+/* Desktop containers are comfortably wider than the tree's native 880px
+   drawing, so this floor just avoids a jarring collapse before content
+   loads. On mobile the tree is rendered at native scale (see the svg's
+   min-width below) and this same floor would leave a large empty gap
+   under a short tree, so it's removed below the same 900px breakpoint
+   used everywhere else in this file. */
+@media(min-width:901px){.phylo-canvas-wrap{min-height:400px}}
 .phylo-dm{overflow-x:auto;padding:12px 18px;background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none;border-top:1px solid var(--border)}
 .phylo-dm table{border-collapse:collapse;font-family:'IBM Plex Mono',monospace;font-size:0.6rem}
 .phylo-dm td,.phylo-dm th{padding:4px 8px;border:1px solid var(--border);text-align:right}
@@ -2816,6 +2848,23 @@ function loadPhyloSample(name) {
   if (s) document.getElementById('phyloInput').value = s;
 }
 
+// The tree's drawing width is computed from the results panel's actual
+// pixel width at build time (see renderPhyloTree). That's correct at the
+// moment you click "Build Tree", but if you then resize the window or
+// drag the DevTools device-toolbar width afterward, the drawing would be
+// left sized for the OLD width. Re-measure and rebuild (from the already-
+// fetched data, no new network call) whenever the viewport changes size.
+var _lastPhyloData = null;
+var _phyloResizeTimer = null;
+window.addEventListener('resize', function(){
+  if (!_lastPhyloData) return;
+  clearTimeout(_phyloResizeTimer);
+  _phyloResizeTimer = setTimeout(function(){
+    var el = document.getElementById('phyloResults');
+    if (el && el.querySelector('.phylo-wrap')) renderPhyloTree(_lastPhyloData, el);
+  }, 150);
+});
+
 async function runPhylo() {
   var fasta = document.getElementById('phyloInput').value.trim();
   if (!fasta) { showErr('phyloErr','Paste FASTA sequences first'); return; }
@@ -2832,6 +2881,7 @@ async function runPhylo() {
     });
     var d = await res.json();
     if (d.error) throw new Error(d.error);
+    _lastPhyloData = d;
     renderPhyloTree(d, el);
   } catch(e) {
     el.innerHTML = '';
@@ -2879,7 +2929,16 @@ function renderPhyloTree(d, container) {
   var LABEL_W = 44, RM = 170, TM = 50, BM = 28;
   var ROW_H   = Math.max(28, Math.min(48, 540 / n));
   var SVG_H   = TM + BM + n * ROW_H;
-  var SVG_W   = 880;
+  // Fit the drawing to whatever width the results panel actually has
+  // (desktop card, mobile full-width column, etc) instead of a fixed 880px.
+  // A fixed width was the root cause of the mobile bug: on a narrow phone
+  // the SVG had to be scaled way down to fit, which shrank the rendered
+  // height too (same aspect ratio) — so the panel ended up with a tiny
+  // tree and a large empty gap below it. Clamping keeps very narrow
+  // phones from crushing the branch/label columns to nothing, at the
+  // cost of a small horizontal scroll on those screens only.
+  var availW  = (container && container.clientWidth) ? container.clientWidth - 36 : 880;
+  var SVG_W   = Math.max(380, Math.min(900, availW));
   var PLOT_W  = SVG_W - LABEL_W - RM;
 
   // Convert depth to x: root (deepest) → leftmost, leaves → rightmost
@@ -2976,8 +3035,8 @@ function renderPhyloTree(d, container) {
   axis += '<text x="'+(LABEL_W+PLOT_W*0.5)+'" y="'+(TM-26)+'" fill="#8fb3c7" font-size="9.5" font-family="monospace" text-anchor="middle">← more similar  ·  p-distance  ·  more divergent →</text>';
   axis += '<rect x="'+LABEL_W+'" y="'+TM+'" width="'+PLOT_W+'" height="'+(SVG_H-TM-BM)+'" fill="none" stroke="#2e4a60" stroke-width="1" rx="4"/>';
 
-  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+SVG_W+' '+SVG_H+
-    '" style="width:100%;display:block;background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none;border-radius:8px">'+
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+SVG_W+'" height="'+SVG_H+'" viewBox="0 0 '+SVG_W+' '+SVG_H+
+    '" style="width:100%;min-width:'+SVG_W+'px;height:auto;display:block;background:var(--glass-lite);backdrop-filter:none;-webkit-backdrop-filter:none;border-radius:8px">'+
     '<defs><filter id="phyloGlow" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'+
     '<linearGradient id="phyloBg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0e1a26"/><stop offset="100%" stop-color="#0a141c"/></linearGradient></defs>'+
     '<rect width="'+SVG_W+'" height="'+SVG_H+'" fill="url(#phyloBg)"/>'+
